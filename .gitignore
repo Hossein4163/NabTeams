@@ -13,9 +13,3 @@ yarn-error.log*
 
 # Env
 .env*
-
-# macOS
-.DS_Store
-/backend/NabTeams.Api/app.db
-/backend/NabTeams.Api/app.db-wal
-/backend/NabTeams.Api/app.db-shm
