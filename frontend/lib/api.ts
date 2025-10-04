@@ -1,6 +1,8 @@
 export type Role = 'participant' | 'judge' | 'mentor' | 'investor' | 'admin';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+export const MAX_MESSAGE_LENGTH = 2000;
+export const MAX_SUPPORT_QUESTION_LENGTH = 1500;
 
 export interface SessionUserInfo {
   id?: string | null;
@@ -109,12 +111,20 @@ export async function fetchMessages(role: Role, auth?: AuthContext): Promise<Mes
 }
 
 export async function sendMessage(role: Role, content: string, auth?: AuthContext): Promise<SendMessageResponse> {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    throw new Error('متن پیام نمی‌تواند خالی باشد.');
+  }
+  if (trimmed.length > MAX_MESSAGE_LENGTH) {
+    throw new Error(`حداکثر طول پیام ${MAX_MESSAGE_LENGTH} نویسه است.`);
+  }
+
   const headers = new Headers({ 'Content-Type': 'application/json' });
   applyAuthHeaders(headers, auth);
   const response = await fetch(`${API_BASE}/api/chat/${role}/messages`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content: trimmed }),
     cache: 'no-store'
   });
 
@@ -127,10 +137,18 @@ export async function sendMessage(role: Role, content: string, auth?: AuthContex
 }
 
 export async function askSupport(payload: { role: Role; question: string }, auth?: AuthContext): Promise<SupportAnswer> {
+  const trimmedQuestion = payload.question.trim();
+  if (!trimmedQuestion) {
+    throw new Error('سوال نمی‌تواند خالی باشد.');
+  }
+  if (trimmedQuestion.length > MAX_SUPPORT_QUESTION_LENGTH) {
+    throw new Error(`حداکثر طول سوال ${MAX_SUPPORT_QUESTION_LENGTH} نویسه است.`);
+  }
+
   return apiFetch<SupportAnswer>(`/api/support/query`, {
     method: 'POST',
     ...auth,
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ role: payload.role, question: trimmedQuestion })
   });
 }
 

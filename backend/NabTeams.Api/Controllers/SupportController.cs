@@ -21,15 +21,22 @@ public class SupportController : ControllerBase
     [HttpPost("query")]
     public async Task<ActionResult<SupportAnswer>> QueryAsync([FromBody] SupportQuery query, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(query.Question))
+        var question = query.Question?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(question))
         {
             return BadRequest("سوال الزامی است.");
+        }
+
+        if (question.Length > SupportQuery.MaxQuestionLength)
+        {
+            return BadRequest($"حداکثر طول سوال {SupportQuery.MaxQuestionLength} نویسه است.");
         }
 
         var role = string.IsNullOrWhiteSpace(query.Role) ? ResolveRoleFromClaims() : query.Role;
         var normalizedQuery = new SupportQuery
         {
-            Question = query.Question,
+            Question = question,
             Role = string.IsNullOrWhiteSpace(role) ? "all" : role!
         };
 

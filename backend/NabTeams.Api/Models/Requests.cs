@@ -2,6 +2,8 @@ namespace NabTeams.Api.Models;
 
 public record SendMessageRequest
 {
+    public const int MaxContentLength = 2000;
+
     public string Content { get; init; } = string.Empty;
 }
 

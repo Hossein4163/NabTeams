@@ -4,7 +4,7 @@ import { HubConnection } from '@microsoft/signalr';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { fetchMessages, MessageModel, Role, sendMessage } from '../lib/api';
+import { fetchMessages, MAX_MESSAGE_LENGTH, MessageModel, Role, sendMessage } from '../lib/api';
 import { createChatConnection } from '../lib/chat-hub';
 import { useRole } from '../lib/use-role';
 
@@ -38,7 +38,9 @@ export function ChatPanel() {
   const [connectionState, setConnectionState] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
 
   const hasAuth = Boolean(accessToken) || Boolean(sessionUser?.id);
-  const canSend = isAuthenticated && hasAuth && content.trim().length > 0 && !loading;
+  const trimmedLength = content.trim().length;
+  const canSend =
+    isAuthenticated && hasAuth && trimmedLength > 0 && trimmedLength <= MAX_MESSAGE_LENGTH && !loading;
   const auth = useMemo(
     () => ({ accessToken, sessionUser }),
     [accessToken, sessionUser?.id, sessionUser?.email, sessionUser?.name, sessionUser?.roles?.join(',')]
@@ -155,12 +157,13 @@ export function ChatPanel() {
     setFeedback(null);
     setAppealId(null);
     try {
-      const response = await sendMessage(role, content, auth);
+      const sanitizedContent = content.trim();
+      const response = await sendMessage(role, sanitizedContent, auth);
       const placeholder: MessageModel = {
         id: response.messageId,
         channel: role,
         senderUserId: currentUserId ?? 'self',
-        content,
+        content: sanitizedContent,
         createdAt: new Date().toISOString(),
         status: response.status,
         moderationRisk: response.moderationRisk,
@@ -252,8 +255,13 @@ export function ChatPanel() {
             rows={3}
             disabled={!hasAuth}
           />
-          <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
             <span>حداکثر 20 پیام در 5 دقیقه برای نقش شرکت‌کننده مجاز است.</span>
+            <span className={trimmedLength > MAX_MESSAGE_LENGTH ? 'text-rose-300' : ''}>
+              {trimmedLength.toLocaleString()} / {MAX_MESSAGE_LENGTH.toLocaleString()} نویسه
+            </span>
+          </div>
+          <div className="flex justify-end">
             <button
               type="submit"
               disabled={!canSend}

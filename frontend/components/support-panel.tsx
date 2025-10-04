@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { askSupport, Role, SupportAnswer } from '../lib/api';
+import { askSupport, MAX_SUPPORT_QUESTION_LENGTH, Role, SupportAnswer } from '../lib/api';
 import { useRole } from '../lib/use-role';
 
 export function SupportPanel() {
@@ -24,6 +24,10 @@ export function SupportPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasAuth = Boolean(accessToken) || Boolean(sessionUser?.id);
+  const trimmedQuestion = question.trim();
+  const questionLength = trimmedQuestion.length;
+  const canSubmit =
+    isAuthenticated && hasAuth && questionLength > 0 && questionLength <= MAX_SUPPORT_QUESTION_LENGTH && !loading;
   const auth = useMemo(
     () => ({ accessToken, sessionUser }),
     [accessToken, sessionUser?.id, sessionUser?.email, sessionUser?.name, sessionUser?.roles?.join(',')]
@@ -31,14 +35,14 @@ export function SupportPanel() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!question.trim() || !isAuthenticated || !hasAuth) {
+    if (!trimmedQuestion || !isAuthenticated || !hasAuth || questionLength > MAX_SUPPORT_QUESTION_LENGTH) {
       return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      const result = await askSupport({ role, question }, auth);
+      const result = await askSupport({ role, question: trimmedQuestion }, auth);
       setAnswer(result);
     } catch (err) {
       setError((err as Error).message);
@@ -78,10 +82,13 @@ export function SupportPanel() {
             className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100"
             disabled={!isAuthenticated || !hasAuth}
           />
+          <span className={`text-xs ${questionLength > MAX_SUPPORT_QUESTION_LENGTH ? 'text-rose-300' : 'text-slate-500'}`}>
+            {questionLength.toLocaleString()} / {MAX_SUPPORT_QUESTION_LENGTH.toLocaleString()} نویسه مجاز
+          </span>
         </label>
         <button
           type="submit"
-          disabled={loading || !isAuthenticated || !hasAuth}
+          disabled={!canSubmit}
           className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-sky-950 disabled:opacity-60"
         >
           {loading ? 'در حال تحلیل...' : 'ارسال سوال'}

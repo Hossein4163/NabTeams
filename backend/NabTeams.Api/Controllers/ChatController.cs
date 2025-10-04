@@ -56,9 +56,16 @@ public class ChatController : ControllerBase
             return BadRequest("نقش نامعتبر است.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Content))
+        var content = request.Content?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(content))
         {
             return BadRequest("متن پیام الزامی است.");
+        }
+
+        if (content.Length > SendMessageRequest.MaxContentLength)
+        {
+            return BadRequest($"حداکثر طول پیام {SendMessageRequest.MaxContentLength} نویسه است.");
         }
 
         if (!HasChannelAccess(channel))
@@ -92,7 +99,7 @@ public class ChatController : ControllerBase
         {
             Channel = channel,
             SenderUserId = userId,
-            Content = request.Content,
+            Content = content,
             Status = MessageStatus.Held,
             ModerationRisk = 0,
             ModerationTags = Array.Empty<string>(),
@@ -101,7 +108,7 @@ public class ChatController : ControllerBase
         };
 
         await _chatRepository.AddMessageAsync(message, cancellationToken);
-        await _moderationQueue.EnqueueAsync(new ChatModerationWorkItem(message.Id, userId, channel, request.Content), cancellationToken);
+        await _moderationQueue.EnqueueAsync(new ChatModerationWorkItem(message.Id, userId, channel, content), cancellationToken);
 
         var response = new SendMessageResponse
         {

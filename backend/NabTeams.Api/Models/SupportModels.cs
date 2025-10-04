@@ -2,6 +2,8 @@ namespace NabTeams.Api.Models;
 
 public record SupportQuery
 {
+    public const int MaxQuestionLength = 1500;
+
     public string Question { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
 }
