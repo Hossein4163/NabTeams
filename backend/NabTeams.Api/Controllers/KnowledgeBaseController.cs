@@ -6,6 +6,7 @@ namespace NabTeams.Api.Controllers;
 
 [ApiController]
 [Route("api/knowledge-base")]
+[Authorize]
 public class KnowledgeBaseController : ControllerBase
 {
     private readonly ISupportKnowledgeBase _knowledgeBase;
@@ -23,6 +24,7 @@ public class KnowledgeBaseController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.Admin)]
     public async Task<ActionResult<KnowledgeBaseItem>> UpsertAsync([FromBody] KnowledgeBaseUpsertRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Body))
@@ -45,6 +47,7 @@ public class KnowledgeBaseController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Policy = AuthorizationPolicies.Admin)]
     public async Task<IActionResult> DeleteAsync(string id, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(id))

@@ -106,4 +106,34 @@ public static class EntityMappingExtensions
             Tags = model.Tags.ToList(),
             UpdatedAt = model.UpdatedAt
         };
+
+    public static Appeal ToModel(this AppealEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            MessageId = entity.MessageId,
+            Channel = entity.Channel,
+            UserId = entity.UserId,
+            SubmittedAt = entity.SubmittedAt,
+            Reason = entity.Reason,
+            Status = entity.Status,
+            ResolutionNotes = entity.ResolutionNotes,
+            ReviewedBy = entity.ReviewedBy,
+            ReviewedAt = entity.ReviewedAt
+        };
+
+    public static AppealEntity ToEntity(this Appeal model)
+        => new()
+        {
+            Id = model.Id,
+            MessageId = model.MessageId,
+            Channel = model.Channel,
+            UserId = model.UserId,
+            SubmittedAt = model.SubmittedAt,
+            Reason = model.Reason,
+            Status = model.Status,
+            ResolutionNotes = model.ResolutionNotes,
+            ReviewedBy = model.ReviewedBy,
+            ReviewedAt = model.ReviewedAt
+        };
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NabTeams.Api.Data;
 using NabTeams.Api.Models;
+using System.Linq;
 
 namespace NabTeams.Api.Stores;
 
@@ -24,12 +25,47 @@ public class EfChatRepository : IChatRepository
     {
         var items = await _dbContext.Messages
             .AsNoTracking()
-            .Where(m => m.Channel == channel)
+            .Where(m => m.Channel == channel && m.Status != MessageStatus.Blocked)
             .OrderBy(m => m.CreatedAt)
             .Take(500)
             .ToListAsync(cancellationToken);
 
         return items.Select(m => m.ToModel()).ToList();
+    }
+
+    public async Task<Message?> GetMessageAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.Messages
+            .AsNoTracking()
+            .SingleOrDefaultAsync(m => m.Id == id, cancellationToken);
+
+        return entity?.ToModel();
+    }
+
+    public async Task UpdateMessageModerationAsync(
+        Guid messageId,
+        MessageStatus status,
+        double risk,
+        IReadOnlyCollection<string> tags,
+        string? notes,
+        int penaltyPoints,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.Messages
+            .SingleOrDefaultAsync(m => m.Id == messageId, cancellationToken);
+
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.Status = status;
+        entity.ModerationRisk = risk;
+        entity.ModerationTags = tags.ToList();
+        entity.ModerationNotes = notes;
+        entity.PenaltyPoints = penaltyPoints;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 
@@ -58,6 +94,15 @@ public class EfModerationLogStore : IModerationLogStore
             .ToListAsync(cancellationToken);
 
         return logs.Select(l => l.ToModel()).ToList();
+    }
+
+    public async Task<ModerationLog?> GetAsync(Guid messageId, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.ModerationLogs
+            .AsNoTracking()
+            .SingleOrDefaultAsync(l => l.MessageId == messageId, cancellationToken);
+
+        return entity?.ToModel();
     }
 }
 
@@ -169,5 +214,83 @@ public class EfSupportKnowledgeBase : ISupportKnowledgeBase
 
         _dbContext.KnowledgeBaseItems.Remove(existing);
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+}
+
+public class EfAppealStore : IAppealStore
+{
+    private readonly ApplicationDbContext _dbContext;
+
+    public EfAppealStore(ApplicationDbContext dbContext)
+    {
+        _dbContext = dbContext;
+    }
+
+    public async Task<Appeal> CreateAsync(Appeal appeal, CancellationToken cancellationToken = default)
+    {
+        var entity = appeal.ToEntity();
+        _dbContext.Appeals.Add(entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.ToModel();
+    }
+
+    public async Task<IReadOnlyCollection<Appeal>> GetForUserAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        var results = await _dbContext.Appeals
+            .AsNoTracking()
+            .Where(a => a.UserId == userId)
+            .OrderByDescending(a => a.SubmittedAt)
+            .ToListAsync(cancellationToken);
+
+        return results.Select(a => a.ToModel()).ToList();
+    }
+
+    public async Task<IReadOnlyCollection<Appeal>> QueryAsync(RoleChannel? channel, AppealStatus? status, CancellationToken cancellationToken = default)
+    {
+        var query = _dbContext.Appeals.AsNoTracking().AsQueryable();
+
+        if (channel.HasValue)
+        {
+            query = query.Where(a => a.Channel == channel.Value);
+        }
+
+        if (status.HasValue)
+        {
+            query = query.Where(a => a.Status == status.Value);
+        }
+
+        var results = await query
+            .OrderBy(a => a.Status)
+            .ThenByDescending(a => a.SubmittedAt)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        return results.Select(a => a.ToModel()).ToList();
+    }
+
+    public async Task<Appeal?> GetAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.Appeals
+            .AsNoTracking()
+            .SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
+
+        return entity?.ToModel();
+    }
+
+    public async Task<Appeal?> ResolveAsync(Guid id, AppealStatus status, string reviewerId, string? notes, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.Appeals.SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return null;
+        }
+
+        entity.Status = status;
+        entity.ResolutionNotes = notes;
+        entity.ReviewedBy = reviewerId;
+        entity.ReviewedAt = DateTimeOffset.UtcNow;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.ToModel();
     }
 }

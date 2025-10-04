@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using NabTeams.Api.Configuration;
 using NabTeams.Api.Models;
 using NabTeams.Api.Stores;
 
@@ -6,6 +8,7 @@ namespace NabTeams.Api.Controllers;
 
 [ApiController]
 [Route("api/moderation")]
+[Authorize(Policy = AuthorizationPolicies.Admin)]
 public class ModerationController : ControllerBase
 {
     private readonly IModerationLogStore _logStore;

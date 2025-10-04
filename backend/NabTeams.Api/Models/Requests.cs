@@ -2,7 +2,6 @@ namespace NabTeams.Api.Models;
 
 public record SendMessageRequest
 {
-    public string UserId { get; init; } = string.Empty;
     public string Content { get; init; } = string.Empty;
 }
 
@@ -30,4 +29,16 @@ public record KnowledgeBaseUpsertRequest
     public string Body { get; init; } = string.Empty;
     public string Audience { get; init; } = string.Empty;
     public IReadOnlyCollection<string>? Tags { get; init; }
+}
+
+public record CreateAppealRequest
+{
+    public Guid MessageId { get; init; }
+    public string Reason { get; init; } = string.Empty;
+}
+
+public record AppealDecisionRequest
+{
+    public AppealStatus Status { get; init; }
+    public string? Notes { get; init; }
 }

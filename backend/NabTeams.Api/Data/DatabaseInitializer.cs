@@ -8,7 +8,7 @@ public static class DatabaseInitializer
     {
         using var scope = services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        await context.Database.EnsureCreatedAsync(cancellationToken);
+        await context.Database.MigrateAsync(cancellationToken);
 
         if (!await context.KnowledgeBaseItems.AnyAsync(cancellationToken))
         {

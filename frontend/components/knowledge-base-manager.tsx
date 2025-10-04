@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import {
   deleteKnowledgeBaseItem,
   fetchKnowledgeBase,
@@ -24,6 +26,21 @@ const initialState: EditorState = {
 };
 
 export function KnowledgeBaseManager() {
+  const { data: session } = useSession();
+  const accessToken = session?.accessToken;
+  const sessionUser = session?.user
+    ? {
+        id: session.user.id ?? session.user.email ?? null,
+        email: session.user.email ?? null,
+        name: session.user.name ?? null,
+        roles: session.user.roles ?? null
+      }
+    : undefined;
+  const auth = useMemo(
+    () => ({ accessToken, sessionUser }),
+    [accessToken, sessionUser?.id, sessionUser?.email, sessionUser?.name, sessionUser?.roles?.join(',')]
+  );
+  const isAdmin = (session?.user?.roles ?? []).includes('admin');
   const [items, setItems] = useState<KnowledgeBaseItem[]>([]);
   const [editor, setEditor] = useState<EditorState>(initialState);
   const [loading, setLoading] = useState(false);
@@ -32,12 +49,17 @@ export function KnowledgeBaseManager() {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isAdmin) {
+      setItems([]);
+      return;
+    }
+
     let cancelled = false;
     async function load() {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchKnowledgeBase();
+        const data = await fetchKnowledgeBase(auth);
         if (!cancelled) {
           setItems(data);
         }
@@ -56,7 +78,7 @@ export function KnowledgeBaseManager() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [auth, isAdmin]);
 
   const audiences = useMemo(
     () => [
@@ -95,7 +117,7 @@ export function KnowledgeBaseManager() {
     setSaving(true);
     setError(null);
     try {
-      await deleteKnowledgeBaseItem(id);
+      await deleteKnowledgeBaseItem(id, auth);
       setItems((prev) => prev.filter((item) => item.id !== id));
       if (editor.id === id) {
         handleReset();
@@ -129,7 +151,7 @@ export function KnowledgeBaseManager() {
           .map((tag) => tag.trim())
           .filter(Boolean)
       };
-      const saved = await upsertKnowledgeBaseItem(payload);
+      const saved = await upsertKnowledgeBaseItem(payload, auth);
       setItems((prev) => {
         const exists = prev.find((item) => item.id === saved.id);
         if (exists) {
@@ -151,6 +173,18 @@ export function KnowledgeBaseManager() {
       setSaving(false);
     }
   };
+
+  if (!isAdmin) {
+    return (
+      <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-6 text-sm text-amber-100">
+        دسترسی به مدیریت دانش تنها برای ادمین‌ها فراهم است. در صورت نیاز لطفاً با تیم پشتیبانی تماس بگیرید یا{' '}
+        <Link href="/auth/signin" className="underline">
+          با حساب کاربری دیگری وارد شوید
+        </Link>
+        .
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[2fr_3fr]">
@@ -201,21 +235,20 @@ export function KnowledgeBaseManager() {
               onChange={(event) => setEditor((prev) => ({ ...prev, body: event.target.value }))}
             />
           </label>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-3">
             <button
               type="submit"
               disabled={saving}
               className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950 disabled:opacity-60"
             >
-              {saving ? 'در حال ذخیره...' : editor.id ? 'به‌روزرسانی منبع' : 'افزودن منبع'}
+              {saving ? 'در حال ذخیره...' : 'ذخیره منبع'}
             </button>
             <button
               type="button"
-              className="rounded-lg border border-slate-600 px-4 py-2 text-sm"
               onClick={handleReset}
-              disabled={saving}
+              className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200"
             >
-              پاک‌سازی فرم
+              ایجاد منبع جدید
             </button>
           </div>
           {success && <p className="text-sm text-emerald-300">{success}</p>}
@@ -225,63 +258,49 @@ export function KnowledgeBaseManager() {
 
       <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
         <header className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">منابع فعال</h2>
-            <p className="text-sm text-slate-400">{loading ? 'در حال بارگذاری...' : `${items.length} منبع ثبت شده`}</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleReset}
-            className="text-sm text-sky-300 underline-offset-2 hover:underline"
-          >
-            افزودن منبع جدید
-          </button>
+          <h2 className="text-xl font-semibold">منابع موجود</h2>
+          {loading && <span className="text-xs text-slate-400">در حال بارگذاری...</span>}
         </header>
-
-        {error && !saving && <p className="text-sm text-rose-300">{error}</p>}
-
-        <ul className="space-y-3 max-h-[70vh] overflow-y-auto pr-2">
-          {items.map((item) => (
-            <li key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <h3 className="text-lg font-semibold">{item.title}</h3>
-                  <p className="text-xs text-slate-400">
-                    نقش هدف: <span className="font-medium text-slate-200">{item.audience}</span> | آخرین بروزرسانی: {new Date(item.updatedAt).toLocaleString('fa-IR')}
-                  </p>
+        {items.length === 0 ? (
+          <p className="text-sm text-slate-400">منبعی ثبت نشده است.</p>
+        ) : (
+          <ul className="space-y-4">
+            {items.map((item) => (
+              <li key={item.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-100">{item.title}</h3>
+                    <p className="text-slate-400">مخاطب: {item.audience}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200"
+                    >
+                      ویرایش
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      className="rounded-lg border border-rose-600 px-3 py-1 text-xs text-rose-200"
+                    >
+                      حذف
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-2 text-xs">
-                  <button
-                    type="button"
-                    className="rounded-md bg-sky-500/20 px-3 py-1 text-sky-200"
-                    onClick={() => handleEdit(item)}
-                    disabled={saving}
-                  >
-                    ویرایش
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md bg-rose-500/20 px-3 py-1 text-rose-200"
-                    onClick={() => handleDelete(item.id)}
-                    disabled={saving}
-                  >
-                    حذف
-                  </button>
-                </div>
-              </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-200">{item.body}</p>
-              {item.tags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
-                  {item.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-slate-800 px-2 py-1">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+                <p className="mt-3 text-sm leading-6 text-slate-100 whitespace-pre-wrap">{item.body}</p>
+                {item.tags.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-indigo-200">
+                    {item.tags.map((tag) => (
+                      <span key={tag} className="rounded-full bg-indigo-900/40 px-2 py-1">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

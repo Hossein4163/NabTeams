@@ -4,7 +4,6 @@ public record SupportQuery
 {
     public string Question { get; init; } = string.Empty;
     public string Role { get; init; } = string.Empty;
-    public string UserId { get; init; } = string.Empty;
 }
 
 public record SupportAnswer

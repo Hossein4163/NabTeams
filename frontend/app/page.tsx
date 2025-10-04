@@ -1,47 +1,86 @@
+'use client';
+
 import Link from 'next/link';
+import { signIn, signOut, useSession } from 'next-auth/react';
 import { RoleSwitcher } from '../components/role-switcher';
 
 export default function HomePage() {
+  const { data: session, status } = useSession();
+  const isAuthenticated = status === 'authenticated';
+
   return (
     <div className="space-y-8">
       <header className="space-y-3">
-        <h1 className="text-3xl font-semibold">داشبورد تعاملی نب‌تیمز</h1>
-        <p className="text-slate-300 max-w-3xl">
-          این نسخه‌ی اولیه شامل چت گلوبال نقش‌محور با پایش محتوایی هوشمند و چت پشتیبانی مبتنی بر دانش ادمین است.
-          برای تست می‌توانید نقش دلخواه را انتخاب کرده و پیام ارسال کنید.
-        </p>
-        <RoleSwitcher />
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold">داشبورد تعاملی نب‌تیمز</h1>
+            <p className="text-slate-300 max-w-3xl">
+              این نسخه شامل چت گلوبال نقش‌محور با پایش محتوایی Gemini، چت پشتیبانی مبتنی بر دانش ادمین و مدیریت اعتراض‌ها است. برای استفاده، ابتدا از طریق SSO وارد شوید.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2 text-sm text-slate-300">
+            {isAuthenticated ? (
+              <>
+                <span>{session?.user?.email ?? session?.user?.name}</span>
+                <button
+                  onClick={() => signOut()}
+                  className="rounded-lg border border-slate-600 px-3 py-1 text-xs text-slate-200"
+                >
+                  خروج از حساب
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => signIn()}
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950"
+              >
+                ورود با SSO یا ورود آزمایشی
+              </button>
+            )}
+          </div>
+        </div>
+        {isAuthenticated && <RoleSwitcher />}
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Link
+        <DashboardLink
           href="/(dashboard)/global-chat"
-          className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 hover:border-slate-600 transition"
-        >
-          <h2 className="text-2xl font-medium mb-2">👥 چت گلوبال</h2>
-          <p className="text-sm text-slate-300">
-            پیام‌های نقش خود را در کانال اختصاصی ارسال کنید و نتیجه‌ی پایش محتوایی را به صورت لحظه‌ای ببینید.
-          </p>
-        </Link>
-        <Link
+          title="👥 چت گلوبال"
+          description="پیام‌های نقش خود را در کانال اختصاصی ارسال کنید و نتیجه‌ی پایش محتوایی را به صورت لحظه‌ای ببینید."
+        />
+        <DashboardLink
           href="/(dashboard)/support"
-          className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 hover:border-slate-600 transition"
-        >
-          <h2 className="text-2xl font-medium mb-2">🛟 پشتیبانی دانشی</h2>
-          <p className="text-sm text-slate-300">
-            پرسش‌های خود را مطرح کنید تا Gemini بر اساس دانش‌پایه‌ی ادمین پاسخ دهد و در صورت نیاز انتقال به اپراتور انجام شود.
-          </p>
-        </Link>
-        <Link
+          title="🛟 پشتیبانی دانشی"
+          description="پرسش‌های خود را مطرح کنید تا Gemini بر اساس دانش‌پایه‌ی ادمین پاسخ دهد و در صورت نیاز انتقال به اپراتور انجام شود."
+        />
+        <DashboardLink
           href="/(dashboard)/knowledge-base"
-          className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 hover:border-slate-600 transition"
-        >
-          <h2 className="text-2xl font-medium mb-2">📚 مدیریت دانش ادمین</h2>
-          <p className="text-sm text-slate-300">
-            منابع پاسخ‌گویی را سازمان‌دهی کنید، مخاطبان هر منبع را تعیین و تاثیر تغییرات را بلافاصله در چت پشتیبانی مشاهده کنید.
-          </p>
-        </Link>
+          title="📚 مدیریت دانش ادمین"
+          description="منابع پاسخ‌گویی را سازمان‌دهی کنید، مخاطبان هر منبع را تعیین و تاثیر تغییرات را بلافاصله در چت پشتیبانی مشاهده کنید."
+        />
+        <DashboardLink
+          href="/appeals"
+          title="⚖️ اعتراض‌های انضباطی"
+          description="درخواست بازبینی برای پیام‌های مسدودشده ثبت کنید یا وضعیت اعتراض‌های قبلی را دنبال کنید."
+        />
       </section>
     </div>
+  );
+}
+
+function DashboardLink({
+  href,
+  title,
+  description
+}: {
+  href: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link href={href} className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 transition hover:border-slate-600">
+      <h2 className="text-2xl font-medium mb-2">{title}</h2>
+      <p className="text-sm text-slate-300">{description}</p>
+    </Link>
   );
 }

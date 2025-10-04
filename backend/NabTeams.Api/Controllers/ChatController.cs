@@ -1,4 +1,8 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+using NabTeams.Api.Configuration;
 using NabTeams.Api.Models;
 using NabTeams.Api.Services;
 using NabTeams.Api.Stores;
@@ -7,26 +11,24 @@ namespace NabTeams.Api.Controllers;
 
 [ApiController]
 [Route("api/chat")]
+[Authorize]
 public class ChatController : ControllerBase
 {
     private readonly IChatRepository _chatRepository;
-    private readonly IModerationService _moderationService;
-    private readonly IModerationLogStore _moderationLogStore;
-    private readonly IUserDisciplineStore _userDisciplineStore;
     private readonly IRateLimiter _rateLimiter;
+    private readonly IChatModerationQueue _moderationQueue;
+    private readonly string _adminRole;
 
     public ChatController(
         IChatRepository chatRepository,
-        IModerationService moderationService,
-        IModerationLogStore moderationLogStore,
-        IUserDisciplineStore userDisciplineStore,
-        IRateLimiter rateLimiter)
+        IRateLimiter rateLimiter,
+        IChatModerationQueue moderationQueue,
+        IOptions<AuthenticationSettings> authOptions)
     {
         _chatRepository = chatRepository;
-        _moderationService = moderationService;
-        _moderationLogStore = moderationLogStore;
-        _userDisciplineStore = userDisciplineStore;
         _rateLimiter = rateLimiter;
+        _moderationQueue = moderationQueue;
+        _adminRole = authOptions.Value.AdminRole;
     }
 
     [HttpGet("{role}/messages")]
@@ -35,6 +37,11 @@ public class ChatController : ControllerBase
         if (!RoleChannelExtensions.TryParse(role, out var channel))
         {
             return BadRequest("نقش نامعتبر است.");
+        }
+
+        if (!HasChannelAccess(channel))
+        {
+            return Forbid();
         }
 
         var messages = await _chatRepository.GetMessagesAsync(channel, cancellationToken);
@@ -49,12 +56,23 @@ public class ChatController : ControllerBase
             return BadRequest("نقش نامعتبر است.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.UserId) || string.IsNullOrWhiteSpace(request.Content))
+        if (string.IsNullOrWhiteSpace(request.Content))
         {
-            return BadRequest("شناسه کاربر و متن پیام الزامی است.");
+            return BadRequest("متن پیام الزامی است.");
         }
 
-        var rateResult = _rateLimiter.CheckQuota(request.UserId, channel);
+        if (!HasChannelAccess(channel))
+        {
+            return Forbid();
+        }
+
+        var userId = GetUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Forbid();
+        }
+
+        var rateResult = _rateLimiter.CheckQuota(userId, channel);
         if (!rateResult.Allowed)
         {
             return StatusCode(429, new SendMessageResponse
@@ -70,67 +88,68 @@ public class ChatController : ControllerBase
             });
         }
 
-        var candidate = new MessageCandidate(request.UserId, channel, request.Content);
-        var moderation = await _moderationService.ModerateAsync(candidate, cancellationToken);
-
-        var status = moderation.Decision switch
-        {
-            ModerationDecision.Publish or ModerationDecision.SoftWarn => MessageStatus.Published,
-            ModerationDecision.Hold => MessageStatus.Held,
-            _ => MessageStatus.Blocked
-        };
-
         var message = new Message
         {
             Channel = channel,
-            SenderUserId = request.UserId,
+            SenderUserId = userId,
             Content = request.Content,
-            Status = status,
-            ModerationRisk = moderation.RiskScore,
-            ModerationTags = moderation.PolicyTags,
-            ModerationNotes = moderation.Notes,
-            PenaltyPoints = moderation.PenaltyPoints
+            Status = MessageStatus.Held,
+            ModerationRisk = 0,
+            ModerationTags = Array.Empty<string>(),
+            ModerationNotes = "در انتظار بررسی خودکار توسط Gemini.",
+            PenaltyPoints = 0
         };
 
-        if (status != MessageStatus.Blocked)
-        {
-            await _chatRepository.AddMessageAsync(message, cancellationToken);
-        }
-
-        var log = new ModerationLog
-        {
-            MessageId = message.Id,
-            UserId = request.UserId,
-            Channel = channel,
-            RiskScore = moderation.RiskScore,
-            PolicyTags = moderation.PolicyTags,
-            ActionTaken = moderation.Decision.ToString(),
-            PenaltyPoints = moderation.PenaltyPoints
-        };
-        await _moderationLogStore.AddAsync(log, cancellationToken);
-
-        if (moderation.PenaltyPoints != 0)
-        {
-            await _userDisciplineStore.UpdateScoreAsync(request.UserId, channel, -moderation.PenaltyPoints, moderation.Notes, message.Id, cancellationToken);
-        }
+        await _chatRepository.AddMessageAsync(message, cancellationToken);
+        await _moderationQueue.EnqueueAsync(new ChatModerationWorkItem(message.Id, userId, channel, request.Content), cancellationToken);
 
         var response = new SendMessageResponse
         {
             MessageId = message.Id,
-            Status = status,
-            ModerationRisk = moderation.RiskScore,
-            ModerationTags = moderation.PolicyTags,
-            ModerationNotes = moderation.Notes,
-            PenaltyPoints = moderation.PenaltyPoints,
-            SoftWarn = moderation.Decision == ModerationDecision.SoftWarn
+            Status = MessageStatus.Held,
+            ModerationRisk = 0,
+            ModerationTags = Array.Empty<string>(),
+            ModerationNotes = message.ModerationNotes,
+            PenaltyPoints = 0,
+            SoftWarn = false
         };
 
-        return moderation.Decision switch
+        return StatusCode(StatusCodes.Status202Accepted, response);
+    }
+
+    private string? GetUserId()
+    {
+        return User.FindFirstValue("sub")
+               ?? User.FindFirstValue(ClaimTypes.NameIdentifier)
+               ?? User.Identity?.Name;
+    }
+
+    private bool HasChannelAccess(RoleChannel channel)
+    {
+        if (IsAdmin())
         {
-            ModerationDecision.Publish or ModerationDecision.SoftWarn => Ok(response),
-            ModerationDecision.Hold => StatusCode(StatusCodes.Status202Accepted, response),
-            ModerationDecision.Block or ModerationDecision.BlockAndReport => StatusCode(StatusCodes.Status403Forbidden, response),
-            _ => Ok(response)
-        };
+            return true;
+        }
+
+        var normalized = channel.ToString().ToLowerInvariant();
+        var roleClaims = User.Claims
+            .Where(c => c.Type == ClaimTypes.Role || c.Type.Equals("role", StringComparison.OrdinalIgnoreCase) || c.Type.Equals("roles", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.Value.ToLowerInvariant());
+
+        return roleClaims.Contains(normalized);
+    }
+
+    private bool IsAdmin()
+    {
+        if (User.IsInRole(_adminRole))
+        {
+            return true;
+        }
+
+        var normalizedAdmin = _adminRole.ToLowerInvariant();
+        return User.Claims
+            .Where(c => c.Type == ClaimTypes.Role || c.Type.Equals("role", StringComparison.OrdinalIgnoreCase) || c.Type.Equals("roles", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.Value.ToLowerInvariant())
+            .Contains(normalizedAdmin);
     }
 }

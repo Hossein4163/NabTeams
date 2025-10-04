@@ -17,6 +17,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<UserDisciplineEntity> UserDisciplines => Set<UserDisciplineEntity>();
     public DbSet<DisciplineEventEntity> DisciplineEvents => Set<DisciplineEventEntity>();
     public DbSet<KnowledgeBaseItemEntity> KnowledgeBaseItems => Set<KnowledgeBaseItemEntity>();
+    public DbSet<AppealEntity> Appeals => Set<AppealEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,6 +25,7 @@ public class ApplicationDbContext : DbContext
 
         var channelConverter = new EnumToStringConverter<RoleChannel>();
         var statusConverter = new EnumToStringConverter<MessageStatus>();
+        var appealStatusConverter = new EnumToStringConverter<AppealStatus>();
 
         var stringListComparer = new ValueComparer<List<string>>(
             (left, right) => (left ?? new()).SequenceEqual(right ?? new()),
@@ -35,7 +37,7 @@ public class ApplicationDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Channel).HasConversion(channelConverter).IsRequired();
             entity.Property(e => e.Status).HasConversion(statusConverter).IsRequired();
-            entity.Property(e => e.SenderUserId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.SenderUserId).HasMaxLength(128).IsRequired();
             entity.Property(e => e.Content).IsRequired();
             entity.Property(e => e.ModerationTags)
                 .HasConversion(
@@ -50,7 +52,7 @@ public class ApplicationDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Channel).HasConversion(channelConverter).IsRequired();
-            entity.Property(e => e.UserId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.UserId).HasMaxLength(128).IsRequired();
             entity.Property(e => e.PolicyTags)
                 .HasConversion(
                     list => string.Join('\u001F', list ?? new()),
@@ -63,7 +65,7 @@ public class ApplicationDbContext : DbContext
         modelBuilder.Entity<UserDisciplineEntity>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.UserId).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.UserId).HasMaxLength(128).IsRequired();
             entity.Property(e => e.Channel).HasConversion(channelConverter).IsRequired();
             entity.HasIndex(e => new { e.UserId, e.Channel }).IsUnique();
             entity.HasMany(e => e.Events)
@@ -90,6 +92,16 @@ public class ApplicationDbContext : DbContext
                         ? new List<string>()
                         : value.Split('\u001F', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList())
                 .Metadata.SetValueComparer(stringListComparer);
+        });
+
+        modelBuilder.Entity<AppealEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Channel).HasConversion(channelConverter).IsRequired();
+            entity.Property(e => e.Status).HasConversion(appealStatusConverter).IsRequired();
+            entity.Property(e => e.UserId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Reason).HasMaxLength(512).IsRequired();
+            entity.HasIndex(e => new { e.MessageId, e.UserId }).IsUnique();
         });
     }
 }
@@ -149,4 +161,18 @@ public class KnowledgeBaseItemEntity
     public string Audience { get; set; } = "all";
     public List<string> Tags { get; set; } = new();
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public class AppealEntity
+{
+    public Guid Id { get; set; }
+    public Guid MessageId { get; set; }
+    public RoleChannel Channel { get; set; }
+    public string UserId { get; set; } = string.Empty;
+    public DateTimeOffset SubmittedAt { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public AppealStatus Status { get; set; }
+    public string? ResolutionNotes { get; set; }
+    public string? ReviewedBy { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
 }

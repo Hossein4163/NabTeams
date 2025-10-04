@@ -1,16 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useRoleContext } from './role-context';
 
 export function useRole() {
-  const [role, setRole] = useState('participant');
+  return useRoleContext().role;
+}
 
-  useEffect(() => {
-    const stored = localStorage.getItem('nabteams:role');
-    if (stored) {
-      setRole(stored);
-    }
-  }, []);
-
-  return role;
+export function useRoleSelection() {
+  const { role, setRole, roles } = useRoleContext();
+  return { role, setRole, roles };
 }
