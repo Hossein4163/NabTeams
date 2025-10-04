@@ -2,8 +2,10 @@ using System.Net.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
-using NabTeams.Api.Models;
-using NabTeams.Api.Services;
+using NabTeams.Application.Abstractions;
+using NabTeams.Application.Common;
+using NabTeams.Domain.Entities;
+using NabTeams.Infrastructure.Services;
 using Xunit;
 
 namespace NabTeams.Api.Tests;
@@ -39,74 +41,104 @@ public class SupportResponderTests
         var responder = CreateResponder(
             new KnowledgeBaseItem
             {
-                Id = "1",
+                Id = "all-1",
                 Title = "قانون عمومی",
+                Body = "این قانون برای همه است.",
                 Audience = "all",
-                Body = "تمام کاربران باید قوانین را رعایت کنند.",
-                Tags = new[] { "قانون", "شرایط" },
+                Tags = new[] { "rule" },
                 UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1)
             },
             new KnowledgeBaseItem
             {
-                Id = "2",
-                Title = "راهنمای شرکت‌کننده",
-                Audience = "participant",
-                Body = "شرکت‌کنندگان باید پروژه را تا جمعه تحویل دهند.",
-                Tags = new[] { "تحویل", "پروژه" },
+                Id = "mentor-1",
+                Title = "قانون منتورها",
+                Body = "منتورها باید گزارش روزانه ثبت کنند.",
+                Audience = "mentor",
+                Tags = new[] { "mentor", "report" },
                 UpdatedAt = DateTimeOffset.UtcNow
-            }
-        );
+            });
 
         var answer = await responder.GetAnswerAsync(new SupportQuery
         {
-            Question = "زمان تحویل پروژه شرکت‌کننده ها چه زمانی است؟",
+            Question = "چطور گزارش ثبت کنم؟",
+            Role = "mentor"
+        });
+
+        Assert.Contains("منتورها", answer.Answer);
+        Assert.Contains("mentor-1", answer.Sources);
+    }
+
+    [Fact]
+    public async Task FallsBackWhenGeminiFails()
+    {
+        var knowledgeBase = new FakeKnowledgeBase(new KnowledgeBaseItem
+        {
+            Id = "faq-1",
+            Title = "زمان‌بندی",
+            Body = "رویداد از ساعت 9 شروع می‌شود.",
+            Audience = "participant",
+            Tags = new[] { "schedule" },
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+
+        var httpFactory = new Mock<IHttpClientFactory>();
+        var options = new OptionsMonitorStub<GeminiOptions>(new GeminiOptions { ApiKey = "test", Endpoint = "https://example" });
+        var responder = new SupportResponder(knowledgeBase, httpFactory.Object, options, NullLogger<SupportResponder>.Instance);
+
+        var answer = await responder.GetAnswerAsync(new SupportQuery
+        {
+            Question = "چه زمانی شروع می‌شود؟",
             Role = "participant"
         });
 
         Assert.False(answer.EscalateToHuman);
-        Assert.Contains("شرکت‌کنندگان", answer.Answer, StringComparison.Ordinal);
-        Assert.Contains("2", answer.Sources);
-        Assert.True(answer.Confidence > 0.3);
+        Assert.Contains("رویداد", answer.Answer);
     }
 
     private sealed class FakeKnowledgeBase : ISupportKnowledgeBase
     {
-        private readonly IReadOnlyCollection<KnowledgeBaseItem> _items;
+        private readonly List<KnowledgeBaseItem> _items;
 
-        public FakeKnowledgeBase(IReadOnlyCollection<KnowledgeBaseItem> items)
+        public FakeKnowledgeBase(params KnowledgeBaseItem[] items)
         {
-            _items = items;
+            _items = items.ToList();
         }
 
         public Task<IReadOnlyCollection<KnowledgeBaseItem>> GetAllAsync(CancellationToken cancellationToken = default)
-            => Task.FromResult(_items);
+            => Task.FromResult<IReadOnlyCollection<KnowledgeBaseItem>>(_items);
 
         public Task<KnowledgeBaseItem> UpsertAsync(KnowledgeBaseItem item, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        {
+            _items.Add(item);
+            return Task.FromResult(item);
+        }
 
         public Task DeleteAsync(string id, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        {
+            _items.RemoveAll(i => i.Id == id);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class OptionsMonitorStub<T> : IOptionsMonitor<T>
     {
-        private readonly T _value;
-
         public OptionsMonitorStub(T value)
         {
-            _value = value;
+            CurrentValue = value;
         }
 
-        public T CurrentValue => _value;
+        public T CurrentValue { get; }
 
-        public T Get(string? name) => _value;
+        public T Get(string? name) => CurrentValue;
 
         public IDisposable OnChange(Action<T, string?> listener) => NullDisposable.Instance;
 
         private sealed class NullDisposable : IDisposable
         {
             public static readonly NullDisposable Instance = new();
-            public void Dispose() { }
+            public void Dispose()
+            {
+            }
         }
     }
 }

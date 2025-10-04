@@ -5,7 +5,12 @@
 ## ساختار مخزن
 
 ```
-backend/                 # پروژه ASP.NET Core (Controllers + EF Core + Auth)
+backend/
+  src/Domain/            # لایه دامنه (Entities، Value Objects)
+  src/Application/       # لایه کاربرد (Contracts، DTOها، سیاست‌ها)
+  src/Infrastructure/    # پیاده‌سازی زیرساخت (EF Core، Gemini، Health Checks)
+  src/Web/               # هاست ASP.NET Core (Program، Controllers، SignalR)
+  NabTeams.Api.Tests/    # تست‌های واحد بک‌اند
 frontend/                # اپ Next.js (App Router + NextAuth)
 implementation_plan.md   # سند تحلیل و طراحی اولیه
 ```
@@ -36,7 +41,7 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
    ```
 3. اجرای سرویس:
    ```bash
-   cd backend/NabTeams.Api
+   cd backend/src/Web
    dotnet restore
    dotnet run --urls http://localhost:5000
    ```

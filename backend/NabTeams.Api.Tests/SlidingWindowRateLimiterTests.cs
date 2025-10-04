@@ -1,5 +1,6 @@
-using NabTeams.Api.Models;
-using NabTeams.Api.Services;
+using NabTeams.Application.Abstractions;
+using NabTeams.Domain.Enums;
+using NabTeams.Infrastructure.Services;
 using Xunit;
 
 namespace NabTeams.Api.Tests;
