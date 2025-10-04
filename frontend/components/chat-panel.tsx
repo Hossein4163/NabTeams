@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { HubConnection } from '@microsoft/signalr';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { fetchMessages, MessageModel, Role, sendMessage } from '../lib/api';
+import { createChatConnection } from '../lib/chat-hub';
 import { useRole } from '../lib/use-role';
 
 const roleLabels: Record<Role, string> = {
@@ -30,8 +32,10 @@ export function ChatPanel() {
   const [content, setContent] = useState('');
   const [messages, setMessages] = useState<MessageModel[]>([]);
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [appealId, setAppealId] = useState<string | null>(null);
+  const [connectionState, setConnectionState] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
 
   const hasAuth = Boolean(accessToken) || Boolean(sessionUser?.id);
   const canSend = isAuthenticated && hasAuth && content.trim().length > 0 && !loading;
@@ -39,31 +43,108 @@ export function ChatPanel() {
     () => ({ accessToken, sessionUser }),
     [accessToken, sessionUser?.id, sessionUser?.email, sessionUser?.name, sessionUser?.roles?.join(',')]
   );
+  const authSignature = useMemo(() => {
+    if (accessToken) {
+      return `token:${accessToken}`;
+    }
+    if (!sessionUser) {
+      return 'guest';
+    }
+    const descriptor = [sessionUser.id, sessionUser.email, sessionUser.name, (sessionUser.roles ?? []).join(',')]
+      .filter(Boolean)
+      .join('|');
+    return `debug:${descriptor}`;
+  }, [accessToken, sessionUser?.id, sessionUser?.email, sessionUser?.name, sessionUser?.roles?.join(',')]);
 
-  const loadMessages = async () => {
-    if (!isAuthenticated || !hasAuth) {
-      return;
-    }
-    try {
-      const data = await fetchMessages(role, auth);
-      setMessages(data);
-    } catch (error) {
-      setFeedback((error as Error).message);
-    }
-  };
+  const currentUserId = useMemo(
+    () => sessionUser?.id ?? sessionUser?.email ?? sessionUser?.name ?? null,
+    [sessionUser?.id, sessionUser?.email, sessionUser?.name]
+  );
+
+  const upsertMessage = useCallback(
+    (incoming: MessageModel) => {
+      setMessages((prev) => {
+        const next = prev.filter((m) => m.id !== incoming.id);
+        if (incoming.status !== 'Blocked') {
+          next.push(incoming);
+          next.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        }
+        return next;
+      });
+
+      if (currentUserId && incoming.senderUserId === currentUserId) {
+        setFeedback(
+          `${incoming.moderationNotes ?? 'نتیجه بررسی در دسترس است.'} (ریسک: ${(incoming.moderationRisk * 100).toFixed(0)}%, امتیاز منفی: ${incoming.penaltyPoints})`
+        );
+        setAppealId(incoming.status === 'Blocked' ? incoming.id : null);
+      }
+    },
+    [currentUserId]
+  );
 
   useEffect(() => {
     setMessages([]);
     setFeedback(null);
     setAppealId(null);
+
     if (!hasAuth) {
+      setConnectionState('disconnected');
+      setHistoryLoading(false);
       return;
     }
-    loadMessages();
-    const interval = setInterval(loadMessages, 5000);
-    return () => clearInterval(interval);
+
+    let active = true;
+    let connection: HubConnection | null = null;
+
+    const bootstrap = async () => {
+      setConnectionState('connecting');
+      setHistoryLoading(true);
+      try {
+        const history = await fetchMessages(role, auth);
+        if (active) {
+          setMessages(history);
+        }
+      } catch (error) {
+        if (active) {
+          setFeedback((error as Error).message);
+        }
+      } finally {
+        if (active) {
+          setHistoryLoading(false);
+        }
+      }
+
+      try {
+        connection = await createChatConnection(role, auth, upsertMessage);
+        if (!active) {
+          await connection.stop();
+          return;
+        }
+
+        setConnectionState('connected');
+        connection.onclose(() => setConnectionState('disconnected'));
+        connection.onreconnecting(() => setConnectionState('connecting'));
+        connection.onreconnected(() => setConnectionState('connected'));
+      } catch (error) {
+        if (active) {
+          setConnectionState('disconnected');
+          setFeedback((error as Error).message);
+        }
+      }
+    };
+
+    bootstrap();
+
+    return () => {
+      active = false;
+      setConnectionState('disconnected');
+      if (connection) {
+        connection.off('MessageUpserted', upsertMessage);
+        connection.stop().catch(() => undefined);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, auth, accessToken, isAuthenticated, hasAuth]);
+  }, [role, hasAuth, authSignature, upsertMessage]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -72,15 +153,27 @@ export function ChatPanel() {
     }
     setLoading(true);
     setFeedback(null);
+    setAppealId(null);
     try {
       const response = await sendMessage(role, content, auth);
+      const placeholder: MessageModel = {
+        id: response.messageId,
+        channel: role,
+        senderUserId: currentUserId ?? 'self',
+        content,
+        createdAt: new Date().toISOString(),
+        status: response.status,
+        moderationRisk: response.moderationRisk,
+        moderationTags: response.moderationTags,
+        moderationNotes: response.moderationNotes,
+        penaltyPoints: response.penaltyPoints
+      };
+      upsertMessage(placeholder);
       setFeedback(
         response.rateLimitMessage ??
-          `${response.moderationNotes ?? ''} (ریسک: ${(response.moderationRisk * 100).toFixed(0)}%, امتیاز منفی: ${response.penaltyPoints})`
+          `${response.moderationNotes ?? 'پیام برای بررسی ارسال شد.'} (ریسک: ${(response.moderationRisk * 100).toFixed(0)}%, امتیاز منفی: ${response.penaltyPoints})`
       );
       setContent('');
-      setAppealId(response.status === 'Blocked' ? response.messageId : null);
-      await loadMessages();
     } catch (error) {
       setFeedback((error as Error).message);
     } finally {
@@ -122,7 +215,9 @@ export function ChatPanel() {
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/70">
         <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-800/60">
-          {messages.length === 0 ? (
+          {historyLoading && messages.length === 0 ? (
+            <p className="p-6 text-sm text-slate-400">در حال بارگذاری پیام‌های قبلی...</p>
+          ) : messages.length === 0 ? (
             <p className="p-6 text-sm text-slate-400">هنوز پیامی ارسال نشده است.</p>
           ) : (
             messages.map((message) => (
@@ -171,6 +266,15 @@ export function ChatPanel() {
       </div>
 
       {feedback && <p className="text-sm text-amber-300">{feedback}</p>}
+      <p className="text-xs text-slate-500">
+        وضعیت اتصال: {
+          {
+            connected: 'متصل',
+            connecting: 'در حال اتصال...',
+            disconnected: 'قطع'
+          }[connectionState]
+        }
+      </p>
       {(!isAuthenticated || !hasAuth) && (
         <p className="text-sm text-rose-200">
           برای ارسال پیام لازم است ابتدا از طریق SSO وارد شوید.{' '}

@@ -1,6 +1,6 @@
 export type Role = 'participant' | 'judge' | 'mentor' | 'investor' | 'admin';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
 
 export interface SessionUserInfo {
   id?: string | null;
@@ -227,4 +227,32 @@ function applyAuthHeaders(headers: Headers, auth?: AuthContext) {
   if (roles.length > 0) {
     headers.set('X-Debug-Roles', roles.join(','));
   }
+}
+
+export function buildDebugQuery(auth?: AuthContext): URLSearchParams {
+  const params = new URLSearchParams();
+  if (!auth || auth.accessToken) {
+    return params;
+  }
+
+  const user = auth.sessionUser;
+  if (!user) {
+    return params;
+  }
+
+  const debugId = user.id ?? user.email ?? user.name ?? null;
+  if (debugId) {
+    params.set('debug_user', String(debugId));
+  }
+
+  if (user.email) {
+    params.set('debug_email', String(user.email));
+  }
+
+  const roles = Array.isArray(user.roles) ? user.roles.filter(Boolean) : [];
+  if (roles.length > 0) {
+    params.set('debug_roles', roles.join(','));
+  }
+
+  return params;
 }

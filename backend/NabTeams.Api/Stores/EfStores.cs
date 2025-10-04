@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NabTeams.Api.Data;
 using NabTeams.Api.Models;
+using System.Linq;
 
 namespace NabTeams.Api.Stores;
 
@@ -39,6 +40,32 @@ public class EfChatRepository : IChatRepository
             .SingleOrDefaultAsync(m => m.Id == id, cancellationToken);
 
         return entity?.ToModel();
+    }
+
+    public async Task UpdateMessageModerationAsync(
+        Guid messageId,
+        MessageStatus status,
+        double risk,
+        IReadOnlyCollection<string> tags,
+        string? notes,
+        int penaltyPoints,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.Messages
+            .SingleOrDefaultAsync(m => m.Id == messageId, cancellationToken);
+
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.Status = status;
+        entity.ModerationRisk = risk;
+        entity.ModerationTags = tags.ToList();
+        entity.ModerationNotes = notes;
+        entity.PenaltyPoints = penaltyPoints;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 

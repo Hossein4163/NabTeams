@@ -79,6 +79,7 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 
 - برای اجرا بدون SSO، مقدار `Authentication__Disabled=true` را در بک‌اند و `AUTH_ALLOW_DEV=true` را در فرانت‌اند قرار دهید تا ورود آزمایشی فعال شود.
 - در حالت غیرفعال بودن احراز هویت (`Authentication__Disabled=true`) فرانت‌اند به صورت خودکار شناسه، ایمیل و نقش‌های کاربر را از طریق هدرهای `X-Debug-User`، `X-Debug-Email` و `X-Debug-Roles` ارسال می‌کند تا API بتواند سیاست‌های نقش‌محور را اعمال کند.
+- برای اتصال real-time (SignalR) در همین حالت توسعه، همان داده‌ها از طریق Query String (`debug_user`، `debug_email`، `debug_roles`) نیز ارسال می‌شود تا هندشیک وب‌سوکت بدون نیاز به هدر سفارشی کار کند.
 - جهت اتصال به سرویس Gemini، کلید سرویس را در `Gemini__ApiKey` قرار دهید. در صورت نیاز می‌توانید مدل‌ها را از طریق `Gemini__ModerationModel` و `Gemini__RagModel` تغییر دهید.
 - درخواست‌های API از فرانت‌اند همیشه توکن دسترسی NextAuth را در هدر `Authorization` ارسال می‌کنند؛ در حالت توسعه (بدون احراز هویت) بک‌اند نیز در حالت آزاد اجرا می‌شود.
 - نرخ محدودسازی پیام‌ها، نگاشت امتیاز و قوانین پایش در `GeminiModerationService` و `SlidingWindowRateLimiter` قابل تنظیم است.

@@ -7,6 +7,14 @@ public interface IChatRepository
     Task AddMessageAsync(Message message, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<Message>> GetMessagesAsync(RoleChannel channel, CancellationToken cancellationToken = default);
     Task<Message?> GetMessageAsync(Guid id, CancellationToken cancellationToken = default);
+    Task UpdateMessageModerationAsync(
+        Guid messageId,
+        MessageStatus status,
+        double risk,
+        IReadOnlyCollection<string> tags,
+        string? notes,
+        int penaltyPoints,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IModerationLogStore

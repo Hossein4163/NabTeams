@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using NabTeams.Api.Configuration;
 using NabTeams.Api.Data;
+using NabTeams.Api.Hubs;
 using NabTeams.Api.Services;
 using NabTeams.Api.Stores;
 
@@ -12,6 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddSignalR();
 
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSection("Authentication"));
@@ -65,8 +67,10 @@ builder.Services.AddScoped<IUserDisciplineStore, EfUserDisciplineStore>();
 builder.Services.AddScoped<IAppealStore, EfAppealStore>();
 builder.Services.AddSingleton<IRateLimiter, SlidingWindowRateLimiter>();
 builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
+builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
+builder.Services.AddHostedService<ChatModerationWorker>();
 
 builder.Services.AddCors(options =>
 {
@@ -87,6 +91,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseRouting();
 app.UseCors("frontend");
 
 if (!authenticationSettings.Disabled)
@@ -99,7 +104,8 @@ else
     {
         if (context.User?.Identity?.IsAuthenticated != true)
         {
-            var debugUser = context.Request.Headers["X-Debug-User"].FirstOrDefault();
+            var debugUser = context.Request.Headers["X-Debug-User"].FirstOrDefault()
+                ?? context.Request.Query["debug_user"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(debugUser))
             {
                 var identity = new ClaimsIdentity("Debug");
@@ -107,13 +113,15 @@ else
                 identity.AddClaim(new Claim("sub", debugUser));
                 identity.AddClaim(new Claim(ClaimTypes.Name, debugUser));
 
-                var debugEmail = context.Request.Headers["X-Debug-Email"].FirstOrDefault();
+                var debugEmail = context.Request.Headers["X-Debug-Email"].FirstOrDefault()
+                    ?? context.Request.Query["debug_email"].FirstOrDefault();
                 if (!string.IsNullOrWhiteSpace(debugEmail))
                 {
                     identity.AddClaim(new Claim(ClaimTypes.Email, debugEmail));
                 }
 
-                var rolesHeader = context.Request.Headers["X-Debug-Roles"].FirstOrDefault();
+                var rolesHeader = context.Request.Headers["X-Debug-Roles"].FirstOrDefault()
+                    ?? context.Request.Query["debug_roles"].FirstOrDefault();
                 if (!string.IsNullOrWhiteSpace(rolesHeader))
                 {
                     var roles = rolesHeader.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -135,5 +143,6 @@ else
 
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();
