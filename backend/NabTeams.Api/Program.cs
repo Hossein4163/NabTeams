@@ -1,12 +1,18 @@
+using System.Net;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using NabTeams.Api.Configuration;
 using NabTeams.Api.Data;
+using NabTeams.Api.HealthChecks;
 using NabTeams.Api.Hubs;
 using NabTeams.Api.Services;
 using NabTeams.Api.Stores;
+using Polly;
+using Polly.Extensions.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,11 +26,15 @@ builder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSect
 var authenticationSettings = builder.Configuration.GetSection("Authentication").Get<AuthenticationSettings>() ?? new AuthenticationSettings { Disabled = true };
 
 builder.Services.AddHttpClient("gemini", client =>
-{
-    var options = builder.Configuration.GetSection("Gemini").Get<GeminiOptions>() ?? new GeminiOptions();
-    client.BaseAddress = new Uri(options.Endpoint.TrimEnd('/') + "/");
-    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
-});
+    {
+        var options = builder.Configuration.GetSection("Gemini").Get<GeminiOptions>() ?? new GeminiOptions();
+        client.BaseAddress = new Uri(options.Endpoint.TrimEnd('/') + "/");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        client.Timeout = TimeSpan.FromSeconds(15);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
 
 if (!authenticationSettings.Disabled)
 {
@@ -60,6 +70,8 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseNpgsql(connectionString));
 
 builder.Services.AddScoped<IChatRepository, EfChatRepository>();
 builder.Services.AddScoped<IModerationLogStore, EfModerationLogStore>();
@@ -71,6 +83,10 @@ builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
+
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database")
+    .AddCheck<GeminiHealthCheck>("gemini");
 
 builder.Services.AddCors(options =>
 {
@@ -145,4 +161,41 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
 
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var payload = new
+        {
+            status = report.Status.ToString(),
+            results = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description,
+                error = entry.Value.Exception?.Message
+            })
+        };
+
+        await context.Response.WriteAsync(JsonSerializer.Serialize(payload));
+    }
+});
+
 app.Run();
+
+static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy() =>
+    HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(response => response.StatusCode == HttpStatusCode.TooManyRequests)
+        .WaitAndRetryAsync(3, attempt => TimeSpan.FromMilliseconds(200 * attempt));
+
+static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy() =>
+    HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));
