@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,7 @@ public class ChatModerationWorker : BackgroundService
     private readonly IUserDisciplineStore _userDisciplineStore;
     private readonly IHubContext<ChatHub, IChatClient> _hubContext;
     private readonly ILogger<ChatModerationWorker> _logger;
+    private readonly IMetricsRecorder _metrics;
 
     public ChatModerationWorker(
         IChatModerationQueue queue,
@@ -24,7 +26,8 @@ public class ChatModerationWorker : BackgroundService
         IModerationLogStore moderationLogStore,
         IUserDisciplineStore userDisciplineStore,
         IHubContext<ChatHub, IChatClient> hubContext,
-        ILogger<ChatModerationWorker> logger)
+        ILogger<ChatModerationWorker> logger,
+        IMetricsRecorder metrics)
     {
         _queue = queue;
         _moderationService = moderationService;
@@ -33,6 +36,7 @@ public class ChatModerationWorker : BackgroundService
         _userDisciplineStore = userDisciplineStore;
         _hubContext = hubContext;
         _logger = logger;
+        _metrics = metrics;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -50,12 +54,14 @@ public class ChatModerationWorker : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to process moderation work item for message {MessageId}", workItem.MessageId);
+                _metrics.RecordModerationFailure();
             }
         }
     }
 
     private async Task ProcessAsync(ChatModerationWorkItem workItem, CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
         var candidate = new MessageCandidate(workItem.UserId, workItem.Channel, workItem.Content);
         var moderation = await _moderationService.ModerateAsync(candidate, cancellationToken);
 
@@ -111,5 +117,8 @@ public class ChatModerationWorker : BackgroundService
         {
             await _hubContext.Clients.Group(ChatHub.BuildGroupName(workItem.Channel)).MessageUpserted(message);
         }
+
+        var elapsed = TimeSpan.FromSeconds((Stopwatch.GetTimestamp() - started) / (double)Stopwatch.Frequency);
+        _metrics.RecordModeration(elapsed, moderation.Decision, moderation.RiskScore);
     }
 }

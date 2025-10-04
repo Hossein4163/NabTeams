@@ -1,0 +1,10 @@
+{
+  "name": "NabTeams Dashboard",
+  "short_name": "NabTeams",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#0f172a",
+  "lang": "fa",
+  "dir": "rtl"
+}

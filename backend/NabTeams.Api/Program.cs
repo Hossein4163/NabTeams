@@ -1,7 +1,11 @@
 using System.Net;
+using System.IO.Compression;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -9,10 +13,14 @@ using NabTeams.Api.Configuration;
 using NabTeams.Api.Data;
 using NabTeams.Api.HealthChecks;
 using NabTeams.Api.Hubs;
+using NabTeams.Api.Middleware;
 using NabTeams.Api.Services;
 using NabTeams.Api.Stores;
 using Polly;
 using Polly.Extensions.Http;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Exporter.Prometheus.AspNetCore;
+using OpenTelemetry.Resources;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +28,29 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSignalR();
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+builder.Services.AddHttpLogging(logging =>
+{
+    logging.LoggingFields = HttpLoggingFields.RequestPath | HttpLoggingFields.RequestMethod | HttpLoggingFields.ResponseStatusCode;
+    logging.RequestBodyLogLimit = 0;
+    logging.ResponseBodyLogLimit = 0;
+});
 
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSection("Authentication"));
@@ -83,6 +114,7 @@ builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
+builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();
 
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database")
@@ -97,6 +129,16 @@ builder.Services.AddCors(options =>
               .AllowCredentials());
 });
 
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("NabTeams.Api"))
+    .WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation();
+        metrics.AddHttpClientInstrumentation();
+        metrics.AddMeter(MetricsRecorder.MeterName);
+        metrics.AddPrometheusExporter();
+    });
+
 var app = builder.Build();
 
 await DatabaseInitializer.InitializeAsync(app.Services);
@@ -106,6 +148,17 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseForwardedHeaders();
+app.UseHttpLogging();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseResponseCompression();
+app.UseSecurityHeaders();
 
 app.UseRouting();
 app.UseCors("frontend");
@@ -160,6 +213,7 @@ else
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
+app.MapPrometheusScrapingEndpoint();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {

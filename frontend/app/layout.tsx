@@ -7,7 +7,9 @@ const rubik = Rubik({ subsets: ['latin', 'arabic'] });
 
 export const metadata: Metadata = {
   title: 'NabTeams Dashboard',
-  description: 'Role-based collaboration with AI moderation and support'
+  description: 'Role-based collaboration with AI moderation and support',
+  referrer: 'no-referrer',
+  manifest: '/manifest.json'
 };
 
 export default function RootLayout({
