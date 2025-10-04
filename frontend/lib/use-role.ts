@@ -10,18 +10,6 @@ export function useRole() {
     if (stored) {
       setRole(stored);
     }
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === 'nabteams:role') {
-        setRole(event.newValue || 'participant');
-      }
-    };
-
-    window.addEventListener('storage', handleStorage);
-
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-    };
   }, []);
 
   return role;

@@ -22,3 +22,12 @@ public record MessagesResponse
 {
     public IReadOnlyCollection<Message> Messages { get; init; } = Array.Empty<Message>();
 }
+
+public record KnowledgeBaseUpsertRequest
+{
+    public string? Id { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public string Body { get; init; } = string.Empty;
+    public string Audience { get; init; } = string.Empty;
+    public IReadOnlyCollection<string>? Tags { get; init; }
+}

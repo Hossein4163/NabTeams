@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using NabTeams.Api.Models;
 
@@ -5,51 +6,14 @@ namespace NabTeams.Api.Services;
 
 public interface ISupportKnowledgeBase
 {
-    IReadOnlyCollection<KnowledgeBaseItem> Items { get; }
+    Task<IReadOnlyCollection<KnowledgeBaseItem>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<KnowledgeBaseItem> UpsertAsync(KnowledgeBaseItem item, CancellationToken cancellationToken = default);
+    Task DeleteAsync(string id, CancellationToken cancellationToken = default);
 }
 
 public interface ISupportResponder
 {
     Task<SupportAnswer> GetAnswerAsync(SupportQuery query, CancellationToken cancellationToken = default);
-}
-
-public class InMemorySupportKnowledgeBase : ISupportKnowledgeBase
-{
-    public IReadOnlyCollection<KnowledgeBaseItem> Items { get; } = new List<KnowledgeBaseItem>
-    {
-        new()
-        {
-            Id = "event-rules",
-            Title = "قوانین کلی رویداد",
-            Body = "شرکت‌کنندگان باید قوانین اخلاقی و حرفه‌ای را رعایت کنند. ساعات برگزاری از 9 تا 18 می‌باشد.",
-            Audience = "participant",
-            Tags = new[] { "rules", "schedule" }
-        },
-        new()
-        {
-            Id = "mentor-support",
-            Title = "نقش منتورها",
-            Body = "منتورها می‌توانند از طریق داشبورد منتور مستقیماً با تیم‌ها گفتگو کنند و دسترسی به اتاق‌های منتورینگ دارند.",
-            Audience = "mentor",
-            Tags = new[] { "mentor", "access" }
-        },
-        new()
-        {
-            Id = "contact-admin",
-            Title = "راه‌های ارتباطی با ادمین",
-            Body = "برای مسائل اضطراری با شماره 021-000000 تماس بگیرید یا از فرم تیکت در داشبورد استفاده کنید.",
-            Audience = "all",
-            Tags = new[] { "contact", "support" }
-        },
-        new()
-        {
-            Id = "investor-brief",
-            Title = "دسترسی سرمایه‌گذاران",
-            Body = "سرمایه‌گذاران به داشبورد ارزیابی مالی و گزارش‌های تیم‌ها دسترسی دارند. نسخه به‌روزشده هر روز ساعت 12 منتشر می‌شود.",
-            Audience = "investor",
-            Tags = new[] { "investor", "reports" }
-        }
-    };
 }
 
 public class SupportResponder : ISupportResponder
@@ -61,58 +25,92 @@ public class SupportResponder : ISupportResponder
         _knowledgeBase = knowledgeBase;
     }
 
-    public Task<SupportAnswer> GetAnswerAsync(SupportQuery query, CancellationToken cancellationToken = default)
+    public async Task<SupportAnswer> GetAnswerAsync(SupportQuery query, CancellationToken cancellationToken = default)
     {
-        var normalizedRole = string.IsNullOrWhiteSpace(query.Role) ? "all" : query.Role.ToLowerInvariant();
+        var normalizedRole = string.IsNullOrWhiteSpace(query.Role) ? "all" : query.Role.Trim().ToLowerInvariant();
         var roleTokens = Tokenize(query.Question);
-        var items = _knowledgeBase.Items
-            .Where(item => item.Audience == "all" || item.Audience.Equals(normalizedRole, StringComparison.OrdinalIgnoreCase))
+
+        if (roleTokens.Count == 0)
+        {
+            return new SupportAnswer
+            {
+                Answer = "لطفاً سوال را با جزئیات بیشتری مطرح کنید تا بتوانم کمک کنم.",
+                Confidence = 0,
+                EscalateToHuman = false
+            };
+        }
+
+        var items = await _knowledgeBase.GetAllAsync(cancellationToken);
+        var candidates = items
+            .Where(item => item.Audience.Equals("all", StringComparison.OrdinalIgnoreCase) || item.Audience.Equals(normalizedRole, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        if (!items.Any())
+        if (candidates.Count == 0)
         {
-            return Task.FromResult(new SupportAnswer
+            return new SupportAnswer
             {
                 Answer = "هیچ منبعی برای نقش شما ثبت نشده است. لطفاً با ادمین تماس بگیرید.",
                 Confidence = 0,
                 EscalateToHuman = true
-            });
+            };
         }
 
-        var scored = new List<(KnowledgeBaseItem Item, double Score)>();
-        foreach (var item in items)
+        var scored = new List<(KnowledgeBaseItem Item, double Score, double AudienceBoost)>();
+        foreach (var item in candidates)
         {
-            var itemTokens = Tokenize(item.Body + " " + item.Title);
+            var itemTokens = Tokenize(string.Join(' ', item.Tags) + " " + item.Title + " " + item.Body);
             var overlap = roleTokens.Intersect(itemTokens).Count();
-            var score = overlap / (double)(roleTokens.Count + 1);
+            var audienceBoost = item.Audience.Equals(normalizedRole, StringComparison.OrdinalIgnoreCase) ? 0.15 : 0;
+            var tagBoost = item.Tags.Intersect(roleTokens, StringComparer.OrdinalIgnoreCase).Count() * 0.1;
+            var score = (overlap / Math.Max(roleTokens.Count, 1)) + audienceBoost + tagBoost;
             if (score > 0)
             {
-                scored.Add((item, score));
+                scored.Add((item, score, audienceBoost + tagBoost));
             }
         }
 
-        if (!scored.Any())
+        if (scored.Count == 0)
         {
-            return Task.FromResult(new SupportAnswer
+            return new SupportAnswer
             {
                 Answer = "برای این سوال پاسخ دقیقی ندارم. لطفاً سوال را دقیق‌تر بیان کنید یا با تیم پشتیبانی تماس بگیرید.",
                 Confidence = 0.2,
                 EscalateToHuman = true
-            });
+            };
         }
 
-        var best = scored.OrderByDescending(x => x.Score).First();
-        var confidence = Math.Clamp(best.Score, 0, 1);
+        var ordered = scored
+            .OrderByDescending(x => x.Score)
+            .ThenByDescending(x => x.AudienceBoost)
+            .Take(3)
+            .ToList();
 
-        var answer = new SupportAnswer
+        var top = ordered.First();
+        var supporting = ordered.Skip(1).Select(x => x.Item).ToList();
+
+        var builder = new StringBuilder();
+        builder.AppendLine(top.Item.Title + ":");
+        builder.AppendLine(top.Item.Body.Trim());
+
+        if (supporting.Count > 0)
         {
-            Answer = $"{best.Item.Title}: {best.Item.Body}",
-            Sources = new[] { best.Item.Id },
+            builder.AppendLine();
+            builder.AppendLine("منابع مرتبط دیگر:");
+            foreach (var item in supporting)
+            {
+                builder.AppendLine($"• {item.Title}: {item.Body}");
+            }
+        }
+
+        var confidence = Math.Clamp(top.Score, 0, 1);
+
+        return new SupportAnswer
+        {
+            Answer = builder.ToString().Trim(),
+            Sources = ordered.Select(x => x.Item.Id).ToList(),
             Confidence = confidence,
             EscalateToHuman = confidence < 0.35
         };
-
-        return Task.FromResult(answer);
     }
 
     private static IReadOnlyCollection<string> Tokenize(string text)

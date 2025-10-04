@@ -13,7 +13,7 @@ export default function HomePage() {
         <RoleSwitcher />
       </header>
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/(dashboard)/global-chat"
           className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 hover:border-slate-600 transition"
@@ -30,6 +30,15 @@ export default function HomePage() {
           <h2 className="text-2xl font-medium mb-2">🛟 پشتیبانی دانشی</h2>
           <p className="text-sm text-slate-300">
             پرسش‌های خود را مطرح کنید تا Gemini بر اساس دانش‌پایه‌ی ادمین پاسخ دهد و در صورت نیاز انتقال به اپراتور انجام شود.
+          </p>
+        </Link>
+        <Link
+          href="/(dashboard)/knowledge-base"
+          className="rounded-xl border border-slate-800 bg-slate-900/60 p-6 hover:border-slate-600 transition"
+        >
+          <h2 className="text-2xl font-medium mb-2">📚 مدیریت دانش ادمین</h2>
+          <p className="text-sm text-slate-300">
+            منابع پاسخ‌گویی را سازمان‌دهی کنید، مخاطبان هر منبع را تعیین و تاثیر تغییرات را بلافاصله در چت پشتیبانی مشاهده کنید.
           </p>
         </Link>
       </section>

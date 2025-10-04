@@ -38,6 +38,15 @@ export interface SupportAnswer {
   escalateToHuman: boolean;
 }
 
+export interface KnowledgeBaseItem {
+  id: string;
+  title: string;
+  body: string;
+  audience: string;
+  tags: string[];
+  updatedAt: string;
+}
+
 export async function fetchMessages(role: Role): Promise<MessageModel[]> {
   const res = await fetch(`${API_BASE}/api/chat/${role}/messages`, {
     cache: 'no-store'
@@ -79,4 +88,38 @@ export async function askSupport(payload: { userId: string; role: Role; question
   }
 
   return res.json();
+}
+
+export async function fetchKnowledgeBase(): Promise<KnowledgeBaseItem[]> {
+  const res = await fetch(`${API_BASE}/api/knowledge-base`, { cache: 'no-store' });
+  if (!res.ok) {
+    throw new Error('خواندن دانش‌پایه ناموفق بود');
+  }
+  return res.json();
+}
+
+export async function upsertKnowledgeBaseItem(item: Partial<KnowledgeBaseItem> & { title: string; body: string; audience?: string; tags?: string[] }): Promise<KnowledgeBaseItem> {
+  const res = await fetch(`${API_BASE}/api/knowledge-base`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(item)
+  });
+
+  if (!res.ok) {
+    throw new Error('ذخیره دانش‌پایه ناموفق بود');
+  }
+
+  return res.json();
+}
+
+export async function deleteKnowledgeBaseItem(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/knowledge-base/${id}`, {
+    method: 'DELETE'
+  });
+
+  if (!res.ok) {
+    throw new Error('حذف دانش‌پایه ناموفق بود');
+  }
 }

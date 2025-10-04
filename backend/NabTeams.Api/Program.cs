@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using NabTeams.Api.Data;
 using NabTeams.Api.Services;
 using NabTeams.Api.Stores;
 
@@ -7,13 +9,16 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddSingleton<IChatRepository, InMemoryChatRepository>();
-builder.Services.AddSingleton<IModerationLogStore, InMemoryModerationLogStore>();
-builder.Services.AddSingleton<IUserDisciplineStore, InMemoryUserDisciplineStore>();
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=app.db"));
+
+builder.Services.AddScoped<IChatRepository, EfChatRepository>();
+builder.Services.AddScoped<IModerationLogStore, EfModerationLogStore>();
+builder.Services.AddScoped<IUserDisciplineStore, EfUserDisciplineStore>();
 builder.Services.AddSingleton<IRateLimiter, SlidingWindowRateLimiter>();
 builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
-builder.Services.AddSingleton<ISupportKnowledgeBase, InMemorySupportKnowledgeBase>();
-builder.Services.AddSingleton<ISupportResponder, SupportResponder>();
+builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
+builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 
 builder.Services.AddCors(options =>
 {
@@ -24,6 +29,8 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+await DatabaseInitializer.InitializeAsync(app.Services);
 
 if (app.Environment.IsDevelopment())
 {
