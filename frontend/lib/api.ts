@@ -217,6 +217,133 @@ export async function fetchDiscipline(role: Role, auth?: AuthContext): Promise<a
   return apiFetch(`/api/discipline/${role}/me`, auth);
 }
 
+export type RegistrationDocumentCategory =
+  | 'ProjectArchive'
+  | 'TeamResume'
+  | 'Presentation'
+  | 'BusinessModel'
+  | 'Other';
+
+export type RegistrationLinkType = 'LinkedIn' | 'GitHub' | 'Website' | 'Demo' | 'Other';
+
+export interface ParticipantTeamMemberInput {
+  fullName: string;
+  role: string;
+  focusArea: string;
+}
+
+export interface ParticipantDocumentInput {
+  category: RegistrationDocumentCategory;
+  fileName: string;
+  fileUrl: string;
+}
+
+export interface ParticipantLinkInput {
+  type: RegistrationLinkType;
+  label?: string | null;
+  url: string;
+}
+
+export interface ParticipantRegistrationPayload {
+  headFirstName: string;
+  headLastName: string;
+  nationalId: string;
+  phoneNumber: string;
+  email?: string | null;
+  birthDate?: string | null;
+  educationDegree: string;
+  fieldOfStudy: string;
+  teamName: string;
+  hasTeam: boolean;
+  teamCompleted: boolean;
+  additionalNotes?: string | null;
+  members: ParticipantTeamMemberInput[];
+  documents: ParticipantDocumentInput[];
+  links: ParticipantLinkInput[];
+}
+
+export interface ParticipantRegistrationResponse {
+  id: string;
+  headFirstName: string;
+  headLastName: string;
+  teamName: string;
+  submittedAt: string;
+  teamCompleted: boolean;
+  members: Array<ParticipantTeamMemberInput & { id: string }>;
+  documents: Array<ParticipantDocumentInput & { id: string }>;
+  links: Array<ParticipantLinkInput & { id: string; label: string }>;
+}
+
+export async function submitParticipantRegistration(
+  payload: ParticipantRegistrationPayload,
+  auth?: AuthContext
+): Promise<ParticipantRegistrationResponse> {
+  return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export interface JudgeRegistrationPayload {
+  firstName: string;
+  lastName: string;
+  nationalId: string;
+  phoneNumber: string;
+  email?: string | null;
+  birthDate?: string | null;
+  fieldOfExpertise: string;
+  highestDegree: string;
+  biography?: string | null;
+}
+
+export interface JudgeRegistrationResponse {
+  id: string;
+  firstName: string;
+  lastName: string;
+  submittedAt: string;
+}
+
+export async function submitJudgeRegistration(
+  payload: JudgeRegistrationPayload,
+  auth?: AuthContext
+): Promise<JudgeRegistrationResponse> {
+  return apiFetch<JudgeRegistrationResponse>(`/api/registrations/judges`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export interface InvestorRegistrationPayload {
+  firstName: string;
+  lastName: string;
+  nationalId: string;
+  phoneNumber: string;
+  email?: string | null;
+  additionalNotes?: string | null;
+  interestAreas: string[];
+}
+
+export interface InvestorRegistrationResponse {
+  id: string;
+  firstName: string;
+  lastName: string;
+  submittedAt: string;
+  interestAreas: string[];
+}
+
+export async function submitInvestorRegistration(
+  payload: InvestorRegistrationPayload,
+  auth?: AuthContext
+): Promise<InvestorRegistrationResponse> {
+  return apiFetch<InvestorRegistrationResponse>(`/api/registrations/investors`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
 function applyAuthHeaders(headers: Headers, auth?: AuthContext) {
   if (!auth) {
     return;
