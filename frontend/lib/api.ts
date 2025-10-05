@@ -307,26 +307,40 @@ export async function submitParticipantRegistration(
   });
 }
 
-export async function fetchParticipantRegistration(
-  id: string,
-  auth?: AuthContext
-): Promise<ParticipantRegistrationResponse> {
-  return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants/${id}`, {
-    ...auth
-  });
+export interface ParticipantDocumentUploadResponse {
+  fileName: string;
+  fileUrl: string;
+  contentType: string;
+  size: number;
 }
 
-export async function finalizeParticipantRegistration(
-  id: string,
+export async function uploadParticipantDocument(
+  file: File,
   auth?: AuthContext
-): Promise<ParticipantRegistrationResponse> {
-  return apiFetch<ParticipantRegistrationResponse>(
-    `/api/registrations/participants/${id}/finalize`,
-    {
-      method: 'POST',
-      ...auth
-    }
-  );
+): Promise<ParticipantDocumentUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const headers = new Headers();
+  applyAuthHeaders(headers, auth);
+
+  const response = await fetch(`${API_BASE}/api/registrations/participants/uploads`, {
+    method: 'POST',
+    body: formData,
+    headers,
+    cache: 'no-store'
+  });
+
+  const body = await safeReadJson(response);
+  if (!response.ok) {
+    const problem = body as any;
+    const firstError = problem?.errors
+      ? Object.values(problem.errors as Record<string, string[]>).flat()[0]
+      : null;
+    throw new Error(firstError ?? problem?.detail ?? problem?.title ?? 'بارگذاری فایل ناموفق بود');
+  }
+
+  return body as ParticipantDocumentUploadResponse;
 }
 
 export interface JudgeRegistrationPayload {

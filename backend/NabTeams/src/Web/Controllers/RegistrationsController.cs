@@ -1,6 +1,9 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Common;
@@ -17,12 +20,34 @@ public class RegistrationsController : ControllerBase
     private const int MaxDocuments = 10;
     private const int MaxLinks = 10;
     private const int MaxInterestAreas = 12;
+    private const long MaxDocumentSizeBytes = 25 * 1024 * 1024;
+
+    private static readonly HashSet<string> AllowedDocumentExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".pdf",
+        ".zip",
+        ".ppt",
+        ".pptx",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".png",
+        ".jpg",
+        ".jpeg"
+    };
+
+    private static readonly string AllowedDocumentExtensionsDisplay = string.Join(
+        "، ",
+        AllowedDocumentExtensions.Select(ext => ext.TrimStart('.')));
 
     private readonly IRegistrationRepository _repository;
+    private readonly IFileStorageService _fileStorage;
 
-    public RegistrationsController(IRegistrationRepository repository)
+    public RegistrationsController(IRegistrationRepository repository, IFileStorageService fileStorage)
     {
         _repository = repository;
+        _fileStorage = fileStorage;
     }
 
     [HttpPost("participants")]
@@ -57,6 +82,67 @@ public class RegistrationsController : ControllerBase
         var response = ParticipantRegistrationResponse.FromDomain(stored);
 
         return CreatedAtAction(nameof(GetParticipantAsync), new { id = response.Id }, response);
+    }
+
+    [HttpPost("participants/uploads")]
+    [AllowAnonymous]
+    [RequestSizeLimit(MaxDocumentSizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxDocumentSizeBytes)]
+    [ProducesResponseType(typeof(ParticipantDocumentUploadResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ParticipantDocumentUploadResponse>> UploadParticipantDocumentAsync(
+        [FromForm] ParticipantDocumentUploadRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File is null)
+        {
+            ModelState.AddModelError(nameof(request.File), "فایل انتخاب نشده است.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.File.Length == 0)
+        {
+            ModelState.AddModelError(nameof(request.File), "فایل انتخاب شده خالی است.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.File.Length > MaxDocumentSizeBytes)
+        {
+            ModelState.AddModelError(
+                nameof(request.File),
+                $"حجم فایل نباید بیش از {MaxDocumentSizeBytes / (1024 * 1024)} مگابایت باشد.");
+            return ValidationProblem(ModelState);
+        }
+
+        var extension = Path.GetExtension(request.File.FileName);
+        if (string.IsNullOrWhiteSpace(extension) || !AllowedDocumentExtensions.Contains(extension))
+        {
+            ModelState.AddModelError(
+                nameof(request.File),
+                $"فرمت فایل پشتیبانی نمی‌شود. فرمت‌های مجاز: {AllowedDocumentExtensionsDisplay}.");
+            return ValidationProblem(ModelState);
+        }
+
+        var contentType = string.IsNullOrWhiteSpace(request.File.ContentType)
+            ? "application/octet-stream"
+            : request.File.ContentType;
+
+        await using var stream = request.File.OpenReadStream();
+        var stored = await _fileStorage.SaveAsync(
+            stream,
+            request.File.FileName,
+            contentType,
+            request.File.Length,
+            cancellationToken);
+
+        var response = new ParticipantDocumentUploadResponse
+        {
+            FileName = stored.OriginalFileName,
+            FileUrl = stored.FileUrl,
+            ContentType = stored.ContentType,
+            Size = stored.Length
+        };
+
+        return Ok(response);
     }
 
     [HttpGet("participants")]
@@ -312,6 +398,25 @@ public class RegistrationsController : ControllerBase
                 FileName = FileName.Trim(),
                 FileUrl = FileUrl.Trim()
             };
+    }
+
+    public record ParticipantDocumentUploadRequest
+    {
+        [Required]
+        public IFormFile? File { get; init; }
+            = null;
+    }
+
+    public record ParticipantDocumentUploadResponse
+    {
+        public string FileName { get; init; } = string.Empty;
+
+        public string FileUrl { get; init; } = string.Empty;
+
+        public string ContentType { get; init; } = string.Empty;
+
+        public long Size { get; init; }
+            = 0;
     }
 
     public record ParticipantLinkRequest
