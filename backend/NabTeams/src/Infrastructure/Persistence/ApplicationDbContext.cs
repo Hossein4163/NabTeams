@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
+using System.Linq;
 
 namespace NabTeams.Infrastructure.Persistence;
 
@@ -19,6 +20,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<DisciplineEventEntity> DisciplineEvents => Set<DisciplineEventEntity>();
     public DbSet<KnowledgeBaseItemEntity> KnowledgeBaseItems => Set<KnowledgeBaseItemEntity>();
     public DbSet<AppealEntity> Appeals => Set<AppealEntity>();
+    public DbSet<ParticipantRegistrationEntity> ParticipantRegistrations => Set<ParticipantRegistrationEntity>();
+    public DbSet<JudgeRegistrationEntity> JudgeRegistrations => Set<JudgeRegistrationEntity>();
+    public DbSet<InvestorRegistrationEntity> InvestorRegistrations => Set<InvestorRegistrationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +31,8 @@ public class ApplicationDbContext : DbContext
         var channelConverter = new EnumToStringConverter<RoleChannel>();
         var statusConverter = new EnumToStringConverter<MessageStatus>();
         var appealStatusConverter = new EnumToStringConverter<AppealStatus>();
+        var documentCategoryConverter = new EnumToStringConverter<RegistrationDocumentCategory>();
+        var linkTypeConverter = new EnumToStringConverter<RegistrationLinkType>();
 
         var stringListComparer = new ValueComparer<List<string>>(
             (left, right) => (left ?? new()).SequenceEqual(right ?? new()),
@@ -104,6 +110,93 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Reason).HasMaxLength(512).IsRequired();
             entity.HasIndex(e => new { e.MessageId, e.UserId }).IsUnique();
         });
+
+        modelBuilder.Entity<ParticipantRegistrationEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.HeadFirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.HeadLastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.NationalId).HasMaxLength(16).IsRequired();
+            entity.Property(e => e.PhoneNumber).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(128);
+            entity.Property(e => e.EducationDegree).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.FieldOfStudy).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.TeamName).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.AdditionalNotes).HasMaxLength(1024);
+            entity.Property(e => e.SubmittedAt).IsRequired();
+
+            entity.HasMany(e => e.Members)
+                .WithOne(e => e.ParticipantRegistration)
+                .HasForeignKey(e => e.ParticipantRegistrationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Documents)
+                .WithOne(e => e.ParticipantRegistration)
+                .HasForeignKey(e => e.ParticipantRegistrationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Links)
+                .WithOne(e => e.ParticipantRegistration)
+                .HasForeignKey(e => e.ParticipantRegistrationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TeamMemberEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FullName).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.Role).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.FocusArea).HasMaxLength(150).IsRequired();
+        });
+
+        modelBuilder.Entity<RegistrationDocumentEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Category).HasConversion(documentCategoryConverter).IsRequired();
+            entity.Property(e => e.FileName).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.FileUrl).HasMaxLength(512).IsRequired();
+        });
+
+        modelBuilder.Entity<RegistrationLinkEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Type).HasConversion(linkTypeConverter).IsRequired();
+            entity.Property(e => e.Label).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Url).HasMaxLength(512).IsRequired();
+        });
+
+        modelBuilder.Entity<JudgeRegistrationEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.NationalId).HasMaxLength(16).IsRequired();
+            entity.Property(e => e.PhoneNumber).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(128);
+            entity.Property(e => e.FieldOfExpertise).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.HighestDegree).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Biography).HasMaxLength(1024);
+            entity.Property(e => e.SubmittedAt).IsRequired();
+        });
+
+        modelBuilder.Entity<InvestorRegistrationEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.FirstName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.LastName).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.NationalId).HasMaxLength(16).IsRequired();
+            entity.Property(e => e.PhoneNumber).HasMaxLength(32).IsRequired();
+            entity.Property(e => e.Email).HasMaxLength(128);
+            entity.Property(e => e.InterestAreas)
+                .HasConversion(
+                    list => string.Join('\u001F', list ?? new()),
+                    value => string.IsNullOrWhiteSpace(value)
+                        ? new List<string>()
+                        : value.Split('\u001F', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList())
+                .Metadata.SetValueComparer(stringListComparer);
+            entity.Property(e => e.AdditionalNotes).HasMaxLength(1024);
+            entity.Property(e => e.SubmittedAt).IsRequired();
+        });
     }
 }
 
@@ -175,4 +268,101 @@ public class AppealEntity
     public string? ResolutionNotes { get; set; }
     public string? ReviewedBy { get; set; }
     public DateTimeOffset? ReviewedAt { get; set; }
+}
+
+public class ParticipantRegistrationEntity
+{
+    public Guid Id { get; set; }
+    public string HeadFirstName { get; set; } = string.Empty;
+    public string HeadLastName { get; set; } = string.Empty;
+    public string NationalId { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public string? Email { get; set; }
+        = null;
+    public DateOnly? BirthDate { get; set; }
+        = null;
+    public string EducationDegree { get; set; } = string.Empty;
+    public string FieldOfStudy { get; set; } = string.Empty;
+    public string TeamName { get; set; } = string.Empty;
+    public bool HasTeam { get; set; }
+        = true;
+    public bool TeamCompleted { get; set; }
+        = false;
+    public string? AdditionalNotes { get; set; }
+        = null;
+    public DateTimeOffset SubmittedAt { get; set; }
+        = DateTimeOffset.UtcNow;
+    public List<TeamMemberEntity> Members { get; set; } = new();
+    public List<RegistrationDocumentEntity> Documents { get; set; } = new();
+    public List<RegistrationLinkEntity> Links { get; set; } = new();
+}
+
+public class TeamMemberEntity
+{
+    public Guid Id { get; set; }
+    public Guid ParticipantRegistrationId { get; set; }
+    public ParticipantRegistrationEntity? ParticipantRegistration { get; set; }
+        = null;
+    public string FullName { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public string FocusArea { get; set; } = string.Empty;
+}
+
+public class RegistrationDocumentEntity
+{
+    public Guid Id { get; set; }
+    public Guid ParticipantRegistrationId { get; set; }
+    public ParticipantRegistrationEntity? ParticipantRegistration { get; set; }
+        = null;
+    public RegistrationDocumentCategory Category { get; set; }
+        = RegistrationDocumentCategory.ProjectArchive;
+    public string FileName { get; set; } = string.Empty;
+    public string FileUrl { get; set; } = string.Empty;
+}
+
+public class RegistrationLinkEntity
+{
+    public Guid Id { get; set; }
+    public Guid ParticipantRegistrationId { get; set; }
+    public ParticipantRegistrationEntity? ParticipantRegistration { get; set; }
+        = null;
+    public RegistrationLinkType Type { get; set; }
+        = RegistrationLinkType.Other;
+    public string Label { get; set; } = string.Empty;
+    public string Url { get; set; } = string.Empty;
+}
+
+public class JudgeRegistrationEntity
+{
+    public Guid Id { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string NationalId { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public string? Email { get; set; }
+        = null;
+    public DateOnly? BirthDate { get; set; }
+        = null;
+    public string FieldOfExpertise { get; set; } = string.Empty;
+    public string HighestDegree { get; set; } = string.Empty;
+    public string? Biography { get; set; }
+        = null;
+    public DateTimeOffset SubmittedAt { get; set; }
+        = DateTimeOffset.UtcNow;
+}
+
+public class InvestorRegistrationEntity
+{
+    public Guid Id { get; set; }
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string NationalId { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
+    public string? Email { get; set; }
+        = null;
+    public List<string> InterestAreas { get; set; } = new();
+    public string? AdditionalNotes { get; set; }
+        = null;
+    public DateTimeOffset SubmittedAt { get; set; }
+        = DateTimeOffset.UtcNow;
 }
