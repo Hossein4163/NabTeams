@@ -22,5 +22,23 @@ public enum RegistrationStatus
 {
     Submitted,
     Finalized,
+    Approved,
+    PaymentRequested,
+    PaymentCompleted,
+    Rejected,
     Cancelled
+}
+
+public enum RegistrationPaymentStatus
+{
+    Pending,
+    Completed,
+    Failed,
+    Cancelled
+}
+
+public enum NotificationChannel
+{
+    Email,
+    Sms
 }

@@ -23,11 +23,16 @@ public class RegistrationsController : ControllerBase
 
     private readonly IRegistrationRepository _repository;
     private readonly IRegistrationDocumentStorage _documentStorage;
+    private readonly IRegistrationWorkflowService _workflowService;
 
-    public RegistrationsController(IRegistrationRepository repository, IRegistrationDocumentStorage documentStorage)
+    public RegistrationsController(
+        IRegistrationRepository repository,
+        IRegistrationDocumentStorage documentStorage,
+        IRegistrationWorkflowService workflowService)
     {
         _repository = repository;
         _documentStorage = documentStorage;
+        _workflowService = workflowService;
     }
 
     [HttpPost("participants")]
@@ -187,6 +192,67 @@ public class RegistrationsController : ControllerBase
         }
 
         return Ok(ParticipantRegistrationResponse.FromDomain(stored));
+    }
+
+    [HttpPost("participants/{id:guid}/approve")]
+    [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [SwaggerOperation(Summary = "تأیید ثبت‌نام و ارسال لینک پرداخت", Description = "وضعیت ثبت‌نام شرکت‌کننده را به تایید شده تغییر می‌دهد، لینک پرداخت مرحله بعد را ایجاد می‌کند و اعلان برای سرپرست ارسال می‌شود.")]
+    [ProducesResponseType(typeof(ParticipantRegistrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ParticipantRegistrationResponse>> ApproveParticipantAsync(
+        Guid id,
+        [FromBody] ParticipantApprovalRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Amount <= 0)
+        {
+            ModelState.AddModelError(nameof(request.Amount), "مبلغ پرداخت باید بزرگ‌تر از صفر باشد.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Recipient))
+        {
+            ModelState.AddModelError(nameof(request.Recipient), "آدرس ایمیل یا شماره تماس گیرنده الزامی است.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ReturnUrl))
+        {
+            ModelState.AddModelError(nameof(request.ReturnUrl), "آدرس بازگشت الزامی است.");
+            return ValidationProblem(ModelState);
+        }
+
+        var result = await _workflowService.ApproveParticipantAsync(
+            id,
+            new ParticipantApprovalOptions(request.Amount, request.Currency ?? "IRR", request.Recipient, request.ReturnUrl),
+            cancellationToken);
+
+        if (result is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(ParticipantRegistrationResponse.FromDomain(result));
+    }
+
+    [HttpPost("participants/{id:guid}/payments/complete")]
+    [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [SwaggerOperation(Summary = "ثبت موفقیت پرداخت شرکت‌کننده", Description = "وضعیت پرداخت ثبت‌نام شرکت‌کننده را کامل می‌کند و اعلان تأیید ارسال می‌شود.")]
+    [ProducesResponseType(typeof(ParticipantRegistrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ParticipantRegistrationResponse>> CompleteParticipantPaymentAsync(
+        Guid id,
+        [FromBody] ParticipantPaymentCompletionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _workflowService.CompleteParticipantPaymentAsync(id, request.GatewayReference, cancellationToken);
+        if (result is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(ParticipantRegistrationResponse.FromDomain(result));
     }
 
     [HttpPost("judges")]
@@ -599,6 +665,33 @@ public class RegistrationsController : ControllerBase
             = null;
     }
 
+    public record ParticipantApprovalRequest
+    {
+        [Range(0.01, double.MaxValue)]
+        public decimal Amount { get; init; }
+            = 0m;
+
+        [MaxLength(16)]
+        public string? Currency { get; init; }
+            = "IRR";
+
+        [Required]
+        [MaxLength(256)]
+        public string Recipient { get; init; } = string.Empty;
+
+        [Required]
+        [MaxLength(512)]
+        [Url]
+        public string ReturnUrl { get; init; } = string.Empty;
+    }
+
+    public record ParticipantPaymentCompletionRequest
+    {
+        [MaxLength(128)]
+        public string? GatewayReference { get; init; }
+            = null;
+    }
+
     public record ParticipantRegistrationSummaryResponse
     {
         public Guid Id { get; init; }
@@ -660,6 +753,10 @@ public class RegistrationsController : ControllerBase
             = Array.Empty<ParticipantDocumentResponse>();
         public IReadOnlyCollection<ParticipantLinkResponse> Links { get; init; }
             = Array.Empty<ParticipantLinkResponse>();
+        public ParticipantPaymentResponse? Payment { get; init; }
+            = null;
+        public IReadOnlyCollection<ParticipantNotificationResponse> Notifications { get; init; }
+            = Array.Empty<ParticipantNotificationResponse>();
 
         public static ParticipantRegistrationResponse FromDomain(ParticipantRegistration registration)
             => new()
@@ -689,6 +786,12 @@ public class RegistrationsController : ControllerBase
                     .ToList(),
                 Links = registration.Links
                     .Select(ParticipantLinkResponse.FromDomain)
+                    .ToList(),
+                Payment = registration.Payment is null
+                    ? null
+                    : ParticipantPaymentResponse.FromDomain(registration.Payment),
+                Notifications = registration.Notifications
+                    .Select(ParticipantNotificationResponse.FromDomain)
                     .ToList()
             };
     }
@@ -743,6 +846,58 @@ public class RegistrationsController : ControllerBase
                 Type = link.Type,
                 Label = link.Label,
                 Url = link.Url
+            };
+    }
+
+    public record ParticipantPaymentResponse
+    {
+        public Guid Id { get; init; }
+        public decimal Amount { get; init; }
+        public string Currency { get; init; } = string.Empty;
+        public string PaymentUrl { get; init; } = string.Empty;
+        public RegistrationPaymentStatus Status { get; init; }
+            = RegistrationPaymentStatus.Pending;
+        public DateTimeOffset RequestedAt { get; init; }
+            = DateTimeOffset.UtcNow;
+        public DateTimeOffset? CompletedAt { get; init; }
+            = null;
+        public string? GatewayReference { get; init; }
+            = null;
+
+        public static ParticipantPaymentResponse FromDomain(RegistrationPayment payment)
+            => new()
+            {
+                Id = payment.Id,
+                Amount = payment.Amount,
+                Currency = payment.Currency,
+                PaymentUrl = payment.PaymentUrl,
+                Status = payment.Status,
+                RequestedAt = payment.RequestedAt,
+                CompletedAt = payment.CompletedAt,
+                GatewayReference = payment.GatewayReference
+            };
+    }
+
+    public record ParticipantNotificationResponse
+    {
+        public Guid Id { get; init; }
+        public NotificationChannel Channel { get; init; }
+            = NotificationChannel.Email;
+        public string Recipient { get; init; } = string.Empty;
+        public string Subject { get; init; } = string.Empty;
+        public string Message { get; init; } = string.Empty;
+        public DateTimeOffset SentAt { get; init; }
+            = DateTimeOffset.UtcNow;
+
+        public static ParticipantNotificationResponse FromDomain(RegistrationNotification notification)
+            => new()
+            {
+                Id = notification.Id,
+                Channel = notification.Channel,
+                Recipient = notification.Recipient,
+                Subject = notification.Subject,
+                Message = notification.Message,
+                SentAt = notification.SentAt
             };
     }
 

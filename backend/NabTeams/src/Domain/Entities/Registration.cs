@@ -28,6 +28,10 @@ public record ParticipantRegistration
         = Array.Empty<RegistrationDocument>();
     public IReadOnlyCollection<RegistrationLink> Links { get; init; }
         = Array.Empty<RegistrationLink>();
+    public RegistrationPayment? Payment { get; init; }
+        = null;
+    public IReadOnlyCollection<RegistrationNotification> Notifications { get; init; }
+        = Array.Empty<RegistrationNotification>();
     public string? AdditionalNotes { get; init; }
         = null;
     public RegistrationStatus Status { get; init; }
@@ -64,6 +68,39 @@ public record RegistrationLink
         = RegistrationLinkType.Other;
     public string Label { get; init; } = string.Empty;
     public string Url { get; init; } = string.Empty;
+}
+
+public record RegistrationPayment
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid ParticipantRegistrationId { get; init; }
+        = Guid.Empty;
+    public decimal Amount { get; init; }
+        = 0m;
+    public string Currency { get; init; } = "IRR";
+    public string PaymentUrl { get; init; } = string.Empty;
+    public RegistrationPaymentStatus Status { get; init; }
+        = RegistrationPaymentStatus.Pending;
+    public DateTimeOffset RequestedAt { get; init; }
+        = DateTimeOffset.UtcNow;
+    public DateTimeOffset? CompletedAt { get; init; }
+        = null;
+    public string? GatewayReference { get; init; }
+        = null;
+}
+
+public record RegistrationNotification
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid ParticipantRegistrationId { get; init; }
+        = Guid.Empty;
+    public NotificationChannel Channel { get; init; }
+        = NotificationChannel.Email;
+    public string Recipient { get; init; } = string.Empty;
+    public string Subject { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+    public DateTimeOffset SentAt { get; init; }
+        = DateTimeOffset.UtcNow;
 }
 
 public record JudgeRegistration

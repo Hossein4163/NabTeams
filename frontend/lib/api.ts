@@ -4,7 +4,18 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:500
 export const MAX_MESSAGE_LENGTH = 2000;
 export const MAX_SUPPORT_QUESTION_LENGTH = 1500;
 
-export type RegistrationStatus = 'Submitted' | 'Finalized' | 'Cancelled';
+export type RegistrationStatus =
+  | 'Submitted'
+  | 'Finalized'
+  | 'Approved'
+  | 'PaymentRequested'
+  | 'PaymentCompleted'
+  | 'Rejected'
+  | 'Cancelled';
+
+export type RegistrationPaymentStatus = 'Pending' | 'Completed' | 'Failed' | 'Cancelled';
+
+export type NotificationChannel = 'Email' | 'Sms';
 
 export interface SessionUserInfo {
   id?: string | null;
@@ -285,6 +296,28 @@ export interface ParticipantRegistrationResponse {
   members: Array<ParticipantTeamMemberInput & { id: string }>;
   documents: Array<ParticipantDocumentInput & { id: string }>;
   links: Array<ParticipantLinkInput & { id: string; label: string }>;
+  payment: ParticipantPayment | null;
+  notifications: ParticipantNotification[];
+}
+
+export interface ParticipantPayment {
+  id: string;
+  amount: number;
+  currency: string;
+  paymentUrl: string;
+  status: RegistrationPaymentStatus;
+  requestedAt: string;
+  completedAt: string | null;
+  gatewayReference: string | null;
+}
+
+export interface ParticipantNotification {
+  id: string;
+  channel: NotificationChannel;
+  recipient: string;
+  subject: string;
+  message: string;
+  sentAt: string;
 }
 
 export async function submitParticipantRegistration(
@@ -329,6 +362,41 @@ export async function getParticipantRegistration(
   return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants/${id}/public`, {
     method: 'GET',
     ...auth
+  });
+}
+
+export interface ParticipantApprovalRequest {
+  amount: number;
+  currency?: string;
+  recipient: string;
+  returnUrl: string;
+}
+
+export async function approveParticipantRegistration(
+  id: string,
+  payload: ParticipantApprovalRequest,
+  auth?: AuthContext
+): Promise<ParticipantRegistrationResponse> {
+  return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants/${id}/approve`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export interface ParticipantPaymentCompletionRequest {
+  gatewayReference?: string | null;
+}
+
+export async function completeParticipantPayment(
+  id: string,
+  payload: ParticipantPaymentCompletionRequest,
+  auth?: AuthContext
+): Promise<ParticipantRegistrationResponse> {
+  return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants/${id}/payments/complete`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(payload)
   });
 }
 

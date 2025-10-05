@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NabTeams.Application.Abstractions;
 using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
+using System;
 using System.Linq;
 
 namespace NabTeams.Infrastructure.Persistence;
@@ -30,6 +31,8 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Members)
             .Include(x => x.Documents)
             .Include(x => x.Links)
+            .Include(x => x.Payment)
+            .Include(x => x.Notifications)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         return entity?.ToModel();
@@ -42,6 +45,8 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Members)
             .Include(x => x.Documents)
             .Include(x => x.Links)
+            .Include(x => x.Payment)
+            .Include(x => x.Notifications)
             .OrderByDescending(x => x.FinalizedAt ?? x.SubmittedAt)
             .Take(200)
             .ToListAsync(cancellationToken);
@@ -58,6 +63,8 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Members)
             .Include(x => x.Documents)
             .Include(x => x.Links)
+            .Include(x => x.Payment)
+            .Include(x => x.Notifications)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)
@@ -98,6 +105,8 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Members)
             .Include(x => x.Documents)
             .Include(x => x.Links)
+            .Include(x => x.Payment)
+            .Include(x => x.Notifications)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)
@@ -116,6 +125,107 @@ public class EfRegistrationRepository : IRegistrationRepository
             ? entity.SummaryFileUrl
             : summaryFileUrl.Trim();
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.ToModel();
+    }
+
+    public async Task<ParticipantRegistration?> UpdateParticipantStatusAsync(
+        Guid id,
+        RegistrationStatus status,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.ParticipantRegistrations
+            .Include(x => x.Members)
+            .Include(x => x.Documents)
+            .Include(x => x.Links)
+            .Include(x => x.Payment)
+            .Include(x => x.Notifications)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        entity.Status = status;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.ToModel();
+    }
+
+    public async Task<RegistrationPayment> SaveParticipantPaymentAsync(
+        Guid participantId,
+        RegistrationPayment payment,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.ParticipantRegistrations
+            .Include(x => x.Payment)
+            .SingleOrDefaultAsync(x => x.Id == participantId, cancellationToken);
+
+        if (entity is null)
+        {
+            throw new InvalidOperationException($"Participant registration {participantId} not found");
+        }
+
+        if (entity.Payment is null)
+        {
+            var paymentEntity = payment.ToEntity();
+            paymentEntity.ParticipantRegistrationId = participantId;
+            entity.Payment = paymentEntity;
+            _dbContext.RegistrationPayments.Add(paymentEntity);
+        }
+        else
+        {
+            entity.Payment.Amount = payment.Amount;
+            entity.Payment.Currency = payment.Currency;
+            entity.Payment.PaymentUrl = payment.PaymentUrl;
+            entity.Payment.Status = payment.Status;
+            entity.Payment.RequestedAt = payment.RequestedAt;
+            entity.Payment.CompletedAt = payment.CompletedAt;
+            entity.Payment.GatewayReference = payment.GatewayReference;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return (entity.Payment ?? throw new InvalidOperationException()).ToModel();
+    }
+
+    public async Task<RegistrationPayment?> UpdateParticipantPaymentStatusAsync(
+        Guid participantId,
+        RegistrationPaymentStatus status,
+        string? gatewayReference,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.ParticipantRegistrations
+            .Include(x => x.Payment)
+            .SingleOrDefaultAsync(x => x.Id == participantId, cancellationToken);
+
+        if (entity?.Payment is null)
+        {
+            return null;
+        }
+
+        entity.Payment.Status = status;
+        if (status == RegistrationPaymentStatus.Completed)
+        {
+            entity.Payment.CompletedAt = DateTimeOffset.UtcNow;
+        }
+
+        if (!string.IsNullOrWhiteSpace(gatewayReference))
+        {
+            entity.Payment.GatewayReference = gatewayReference;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.Payment.ToModel();
+    }
+
+    public async Task<RegistrationNotification> AddParticipantNotificationAsync(
+        Guid participantId,
+        RegistrationNotification notification,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = notification.ToEntity();
+        entity.ParticipantRegistrationId = participantId;
+        _dbContext.RegistrationNotifications.Add(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return entity.ToModel();
     }

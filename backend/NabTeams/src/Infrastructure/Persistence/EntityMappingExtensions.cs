@@ -187,6 +187,11 @@ public static class EntityMappingExtensions
                     Label = l.Label,
                     Url = l.Url
                 })
+                .ToList(),
+            Payment = entity.Payment?.ToModel(),
+            Notifications = (entity.Notifications ?? new List<RegistrationNotificationEntity>())
+                .OrderByDescending(n => n.SentAt)
+                .Select(n => n.ToModel())
                 .ToList()
         };
 
@@ -214,6 +219,21 @@ public static class EntityMappingExtensions
         };
 
         entity.UpdateCollections(model);
+        if (model.Payment is not null)
+        {
+            entity.Payment = model.Payment.ToEntity();
+            entity.Payment.ParticipantRegistrationId = entity.Id;
+        }
+
+        entity.Notifications = model.Notifications
+            .Select(n =>
+            {
+                var notificationEntity = n.ToEntity();
+                notificationEntity.ParticipantRegistrationId = entity.Id;
+                return notificationEntity;
+            })
+            .ToList();
+
         return entity;
     }
 
@@ -251,7 +271,74 @@ public static class EntityMappingExtensions
                 Url = l.Url
             })
             .ToList();
+
+        if (model.Payment is not null)
+        {
+            entity.Payment = model.Payment.ToEntity();
+            entity.Payment.ParticipantRegistrationId = entity.Id;
+        }
+
+        entity.Notifications = model.Notifications
+            .Select(n =>
+            {
+                var notificationEntity = n.ToEntity();
+                notificationEntity.ParticipantRegistrationId = entity.Id;
+                return notificationEntity;
+            })
+            .ToList();
     }
+
+    public static RegistrationPayment ToModel(this RegistrationPaymentEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            ParticipantRegistrationId = entity.ParticipantRegistrationId,
+            Amount = entity.Amount,
+            Currency = entity.Currency,
+            PaymentUrl = entity.PaymentUrl,
+            Status = entity.Status,
+            RequestedAt = entity.RequestedAt,
+            CompletedAt = entity.CompletedAt,
+            GatewayReference = entity.GatewayReference
+        };
+
+    public static RegistrationPaymentEntity ToEntity(this RegistrationPayment model)
+        => new()
+        {
+            Id = model.Id,
+            ParticipantRegistrationId = model.ParticipantRegistrationId,
+            Amount = model.Amount,
+            Currency = model.Currency,
+            PaymentUrl = model.PaymentUrl,
+            Status = model.Status,
+            RequestedAt = model.RequestedAt,
+            CompletedAt = model.CompletedAt,
+            GatewayReference = model.GatewayReference
+        };
+
+    public static RegistrationNotification ToModel(this RegistrationNotificationEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            ParticipantRegistrationId = entity.ParticipantRegistrationId,
+            Channel = entity.Channel,
+            Recipient = entity.Recipient,
+            Subject = entity.Subject,
+            Message = entity.Message,
+            SentAt = entity.SentAt
+        };
+
+    public static RegistrationNotificationEntity ToEntity(this RegistrationNotification model)
+        => new()
+        {
+            Id = model.Id,
+            ParticipantRegistrationId = model.ParticipantRegistrationId,
+            Channel = model.Channel,
+            Recipient = model.Recipient,
+            Subject = model.Subject,
+            Message = model.Message,
+            SentAt = model.SentAt
+        };
 
     public static JudgeRegistration ToModel(this JudgeRegistrationEntity entity)
             => new()

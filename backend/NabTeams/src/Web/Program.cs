@@ -20,6 +20,7 @@ using Polly;
 using Polly.Extensions.Http;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Common;
+using NabTeams.Application.Registrations;
 using NabTeams.Infrastructure.HealthChecks;
 using NabTeams.Infrastructure.Monitoring;
 using NabTeams.Infrastructure.Persistence;
@@ -72,6 +73,7 @@ builder.Services.AddHttpLogging(logging =>
 
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSection("Authentication"));
+builder.Services.Configure<PaymentGatewayOptions>(builder.Configuration.GetSection("Payments"));
 var authenticationSettings = builder.Configuration.GetSection("Authentication").Get<AuthenticationSettings>() ?? new AuthenticationSettings { Disabled = true };
 
 builder.Services.AddHttpClient("gemini", client =>
@@ -132,6 +134,9 @@ builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
 builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
 builder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();
+builder.Services.AddSingleton<INotificationService, FakeNotificationService>();
+builder.Services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
+builder.Services.AddScoped<IRegistrationWorkflowService, RegistrationWorkflowService>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
 builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();
@@ -194,6 +199,8 @@ if (!app.Environment.IsDevelopment())
 app.UseResponseCompression();
 app.UseSecurityHeaders();
 app.UseStaticFiles(registrationDocumentStaticFiles);
+
+app.UseStaticFiles();
 
 app.UseStaticFiles();
 

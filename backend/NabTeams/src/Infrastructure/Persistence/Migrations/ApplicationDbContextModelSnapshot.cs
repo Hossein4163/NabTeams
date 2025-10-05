@@ -493,6 +493,88 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.ToTable("RegistrationLinks");
             });
 
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationNotificationEntity", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid");
+
+                b.Property<NotificationChannel>("Channel")
+                    .HasColumnType("text")
+                    .HasConversion<string>();
+
+                b.Property<string>("Message")
+                    .IsRequired()
+                    .HasMaxLength(2048)
+                    .HasColumnType("character varying(2048)");
+
+                b.Property<Guid>("ParticipantRegistrationId")
+                    .HasColumnType("uuid");
+
+                b.Property<string>("Recipient")
+                    .IsRequired()
+                    .HasMaxLength(256)
+                    .HasColumnType("character varying(256)");
+
+                b.Property<DateTimeOffset>("SentAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("Subject")
+                    .IsRequired()
+                    .HasMaxLength(256)
+                    .HasColumnType("character varying(256)");
+
+                b.HasKey("Id");
+
+                b.HasIndex("ParticipantRegistrationId");
+
+                b.ToTable("RegistrationNotifications");
+            });
+
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid");
+
+                b.Property<decimal>("Amount")
+                    .HasColumnType("numeric(18,2)");
+
+                b.Property<string>("Currency")
+                    .IsRequired()
+                    .HasMaxLength(16)
+                    .HasColumnType("character varying(16)");
+
+                b.Property<DateTimeOffset?>("CompletedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("GatewayReference")
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<string>("PaymentUrl")
+                    .IsRequired()
+                    .HasMaxLength(512)
+                    .HasColumnType("character varying(512)");
+
+                b.Property<Guid>("ParticipantRegistrationId")
+                    .HasColumnType("uuid");
+
+                b.Property<DateTimeOffset>("RequestedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<RegistrationPaymentStatus>("Status")
+                    .HasColumnType("text")
+                    .HasConversion<string>();
+
+                b.HasKey("Id");
+
+                b.HasIndex("ParticipantRegistrationId")
+                    .IsUnique();
+
+                b.ToTable("RegistrationPayments");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.TeamMemberEntity", b =>
             {
                 b.Property<Guid>("Id")
@@ -583,6 +665,28 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.Navigation("ParticipantRegistration");
             });
 
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationNotificationEntity", b =>
+            {
+                b.HasOne("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", "ParticipantRegistration")
+                    .WithMany("Notifications")
+                    .HasForeignKey("ParticipantRegistrationId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("ParticipantRegistration");
+            });
+
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", b =>
+            {
+                b.HasOne("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", "ParticipantRegistration")
+                    .WithOne("Payment")
+                    .HasForeignKey("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", "ParticipantRegistrationId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("ParticipantRegistration");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.TeamMemberEntity", b =>
             {
                 b.HasOne("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", "ParticipantRegistration")
@@ -601,6 +705,10 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.Navigation("Links");
 
                 b.Navigation("Members");
+
+                b.Navigation("Notifications");
+
+                b.Navigation("Payment");
             });
 
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.UserDisciplineEntity", b =>

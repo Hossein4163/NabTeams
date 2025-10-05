@@ -26,6 +26,7 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 | `Authentication__Audience`                                      | بک‌اند      | Audience توکن JWT.                                                                                                |
 | `Authentication__AdminRole`                                     | بک‌اند      | نام نقش ادمین (پیش‌فرض `admin`).                                                                                  |
 | `Authentication__Disabled`                                      | بک‌اند      | اگر `true` باشد، احراز هویت غیرفعال می‌شود (برای توسعه محلی).                                                     |
+| `Payments__BaseUrl`                                             | بک‌اند      | آدرس پایه برای تولید لینک‌های پرداخت (پیش‌فرض `https://payments.example.com/session`).                           |
 | `NEXTAUTH_URL`                                                  | فرانت‌اند   | آدرس پابلیک اپ Next.js (مثلاً `http://localhost:3000`).                                                           |
 | `NEXTAUTH_SECRET`                                               | فرانت‌اند   | کلید رمزنگاری سشن NextAuth.                                                                                       |
 | `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_SCOPE` | فرانت‌اند   | تنظیمات ارائه‌دهنده OIDC برای NextAuth. اگر مقداردهی نشود و `AUTH_ALLOW_DEV=true` باشد، ورود آزمایشی فعال می‌شود. |
@@ -61,6 +62,9 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 - `POST /api/appeals` — ثبت اعتراض نسبت به پیام مسدود شده.
 - `GET /api/appeals` — فهرست اعتراض‌های کاربر.
 - `GET /api/appeals/admin` و `POST /api/appeals/{id}/decision` — بررسی و تصمیم‌گیری توسط ادمین.
+- `POST /api/registrations/participants/{id}/finalize` — تأیید نهایی ثبت‌نام توسط تیم.
+- `POST /api/registrations/participants/{id}/approve` — تایید ادمین، ایجاد لینک پرداخت و ارسال اعلان.
+- `POST /api/registrations/participants/{id}/payments/complete` — ثبت موفقیت پرداخت و ارسال اعلان تایید.
 - `POST /api/support/query` — پاسخ دانشی (RAG) با Gemini.
 - `POST /api/registrations/participants/uploads` — بارگذاری مدارک ثبت‌نام و دریافت لینک قابل‌دانلود.
 - `GET/POST/DELETE /api/knowledge-base` — مدیریت منابع دانش توسط ادمین.

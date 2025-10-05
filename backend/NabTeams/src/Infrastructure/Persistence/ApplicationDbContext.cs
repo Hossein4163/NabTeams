@@ -23,6 +23,8 @@ public class ApplicationDbContext : DbContext
     public DbSet<ParticipantRegistrationEntity> ParticipantRegistrations => Set<ParticipantRegistrationEntity>();
     public DbSet<JudgeRegistrationEntity> JudgeRegistrations => Set<JudgeRegistrationEntity>();
     public DbSet<InvestorRegistrationEntity> InvestorRegistrations => Set<InvestorRegistrationEntity>();
+    public DbSet<RegistrationPaymentEntity> RegistrationPayments => Set<RegistrationPaymentEntity>();
+    public DbSet<RegistrationNotificationEntity> RegistrationNotifications => Set<RegistrationNotificationEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +36,8 @@ public class ApplicationDbContext : DbContext
         var documentCategoryConverter = new EnumToStringConverter<RegistrationDocumentCategory>();
         var linkTypeConverter = new EnumToStringConverter<RegistrationLinkType>();
         var registrationStatusConverter = new EnumToStringConverter<RegistrationStatus>();
+        var paymentStatusConverter = new EnumToStringConverter<RegistrationPaymentStatus>();
+        var notificationChannelConverter = new EnumToStringConverter<NotificationChannel>();
 
         var stringListComparer = new ValueComparer<List<string>>(
             (left, right) => (left ?? new()).SequenceEqual(right ?? new()),
@@ -142,6 +146,16 @@ public class ApplicationDbContext : DbContext
                 .WithOne(e => e.ParticipantRegistration)
                 .HasForeignKey(e => e.ParticipantRegistrationId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Payment)
+                .WithOne(e => e.ParticipantRegistration)
+                .HasForeignKey<RegistrationPaymentEntity>(e => e.ParticipantRegistrationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Notifications)
+                .WithOne(e => e.ParticipantRegistration)
+                .HasForeignKey(e => e.ParticipantRegistrationId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TeamMemberEntity>(entity =>
@@ -166,6 +180,27 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Type).HasConversion(linkTypeConverter).IsRequired();
             entity.Property(e => e.Label).HasMaxLength(128).IsRequired();
             entity.Property(e => e.Url).HasMaxLength(512).IsRequired();
+        });
+
+        modelBuilder.Entity<RegistrationPaymentEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Amount).HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(e => e.Currency).HasMaxLength(16).IsRequired();
+            entity.Property(e => e.PaymentUrl).HasMaxLength(512).IsRequired();
+            entity.Property(e => e.Status).HasConversion(paymentStatusConverter).IsRequired();
+            entity.Property(e => e.GatewayReference).HasMaxLength(128);
+            entity.Property(e => e.RequestedAt).IsRequired();
+        });
+
+        modelBuilder.Entity<RegistrationNotificationEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Channel).HasConversion(notificationChannelConverter).IsRequired();
+            entity.Property(e => e.Recipient).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.Subject).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.Message).HasMaxLength(2048).IsRequired();
+            entity.Property(e => e.SentAt).IsRequired();
         });
 
         modelBuilder.Entity<JudgeRegistrationEntity>(entity =>
@@ -306,6 +341,9 @@ public class ParticipantRegistrationEntity
     public List<TeamMemberEntity> Members { get; set; } = new();
     public List<RegistrationDocumentEntity> Documents { get; set; } = new();
     public List<RegistrationLinkEntity> Links { get; set; } = new();
+    public RegistrationPaymentEntity? Payment { get; set; }
+        = null;
+    public List<RegistrationNotificationEntity> Notifications { get; set; } = new();
 }
 
 public class TeamMemberEntity
@@ -341,6 +379,41 @@ public class RegistrationLinkEntity
         = RegistrationLinkType.Other;
     public string Label { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
+}
+
+public class RegistrationPaymentEntity
+{
+    public Guid Id { get; set; }
+    public Guid ParticipantRegistrationId { get; set; }
+    public ParticipantRegistrationEntity? ParticipantRegistration { get; set; }
+        = null;
+    public decimal Amount { get; set; }
+        = 0m;
+    public string Currency { get; set; } = string.Empty;
+    public string PaymentUrl { get; set; } = string.Empty;
+    public RegistrationPaymentStatus Status { get; set; }
+        = RegistrationPaymentStatus.Pending;
+    public DateTimeOffset RequestedAt { get; set; }
+        = DateTimeOffset.UtcNow;
+    public DateTimeOffset? CompletedAt { get; set; }
+        = null;
+    public string? GatewayReference { get; set; }
+        = null;
+}
+
+public class RegistrationNotificationEntity
+{
+    public Guid Id { get; set; }
+    public Guid ParticipantRegistrationId { get; set; }
+    public ParticipantRegistrationEntity? ParticipantRegistration { get; set; }
+        = null;
+    public NotificationChannel Channel { get; set; }
+        = NotificationChannel.Email;
+    public string Recipient { get; set; } = string.Empty;
+    public string Subject { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
+    public DateTimeOffset SentAt { get; set; }
+        = DateTimeOffset.UtcNow;
 }
 
 public class JudgeRegistrationEntity

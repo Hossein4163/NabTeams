@@ -76,6 +76,7 @@ public static class DatabaseInitializer
                 HasTeam = true,
                 TeamCompleted = true,
                 AdditionalNotes = "تیم ما روی سامانهٔ تحلیل داده برای کشاورزی هوشمند کار می‌کند.",
+                Status = RegistrationStatus.PaymentRequested,
                 SubmittedAt = DateTimeOffset.UtcNow.AddDays(-2),
                 Members = new List<TeamMemberEntity>
                 {
@@ -126,6 +127,27 @@ public static class DatabaseInitializer
                         Type = RegistrationLinkType.LinkedIn,
                         Label = "لینکدین",
                         Url = "https://linkedin.com/company/demo-team"
+                    }
+                },
+                Payment = new RegistrationPaymentEntity
+                {
+                    Id = Guid.Parse("C0E075F0-20D1-4F3B-956B-9CE814A5BCE5"),
+                    Amount = 2500000m,
+                    Currency = "IRR",
+                    PaymentUrl = "https://payments.example.com/session/C0E075F0-20D1-4F3B-956B-9CE814A5BCE5",
+                    Status = RegistrationPaymentStatus.Pending,
+                    RequestedAt = DateTimeOffset.UtcNow.AddDays(-1)
+                },
+                Notifications = new List<RegistrationNotificationEntity>
+                {
+                    new RegistrationNotificationEntity
+                    {
+                        Id = Guid.Parse("5F9F3B13-1EB6-4AF0-9D34-3FA3C370AF0F"),
+                        Channel = NotificationChannel.Email,
+                        Recipient = "sara.mahmoudi@example.com",
+                        Subject = "دریافت لینک پرداخت مرحله دوم",
+                        Message = "لطفاً هزینه ورود به مرحله دوم را از طریق لینک پرداخت ارسال شده تکمیل کنید.",
+                        SentAt = DateTimeOffset.UtcNow.AddHours(-20)
                     }
                 }
             };

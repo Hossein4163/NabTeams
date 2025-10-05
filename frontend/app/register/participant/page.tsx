@@ -10,6 +10,8 @@ import {
   RegistrationDocumentCategory,
   RegistrationLinkType,
   RegistrationStatus,
+  RegistrationPaymentStatus,
+  NotificationChannel,
   finalizeParticipantRegistration,
   submitParticipantRegistration,
   updateParticipantRegistration,
@@ -66,11 +68,36 @@ function formatStatus(status: RegistrationStatus) {
   switch (status) {
     case 'Finalized':
       return 'تأیید نهایی شد';
+    case 'Approved':
+      return 'در انتظار ارسال لینک پرداخت';
+    case 'PaymentRequested':
+      return 'منتظر پرداخت تیم';
+    case 'PaymentCompleted':
+      return 'پرداخت تکمیل شد';
+    case 'Rejected':
+      return 'رد شده توسط داور';
     case 'Cancelled':
       return 'لغو شده';
     default:
-      return 'در انتظار تأیید نهایی';
+      return 'در انتظار بازبینی نهایی';
   }
+}
+
+function formatPaymentStatus(status: RegistrationPaymentStatus) {
+  switch (status) {
+    case 'Completed':
+      return 'پرداخت نهایی شد';
+    case 'Failed':
+      return 'پرداخت ناموفق';
+    case 'Cancelled':
+      return 'پرداخت لغو شد';
+    default:
+      return 'در انتظار پرداخت';
+  }
+}
+
+function formatChannel(channel: NotificationChannel) {
+  return channel === 'Sms' ? 'پیامک' : 'ایمیل';
 }
 
 function createInitialState(): ParticipantFormState {
@@ -430,7 +457,13 @@ export default function ParticipantRegistrationPage() {
   }
 
   if (result) {
-    const isFinalized = result.status === 'Finalized';
+    const canEdit = result.status === 'Submitted';
+    const canFinalize = result.status === 'Submitted';
+    const payment = result.payment;
+    const pendingPayment = payment?.status === 'Pending';
+    const formattedAmount = payment
+      ? new Intl.NumberFormat('fa-IR').format(payment.amount)
+      : null;
     return (
       <div className="space-y-6">
         <div className="rounded-xl border border-emerald-600/50 bg-emerald-500/10 p-6">
@@ -444,6 +477,9 @@ export default function ParticipantRegistrationPage() {
               تاریخ تأیید نهایی: {new Date(result.finalizedAt).toLocaleString('fa-IR')}
             </p>
           )}
+          <p className="mt-3 text-xs text-emerald-200/60">
+            برای پیگیری‌های بعدی می‌توانید به صفحه داشبورد وضعیت مراجعه کنید یا این صفحه را ذخیره نمایید.
+          </p>
         </div>
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/40 p-6">
           <h3 className="text-lg font-semibold">خلاصه اطلاعات ارسال‌شده</h3>
@@ -514,6 +550,71 @@ export default function ParticipantRegistrationPage() {
               </ul>
             </div>
           )}
+          {payment && (
+            <div className="rounded-lg border border-emerald-600/40 bg-emerald-500/5 p-4 text-sm">
+              <h4 className="mb-2 font-medium text-emerald-200">وضعیت پرداخت مرحله دوم</h4>
+              <dl className="grid gap-2 md:grid-cols-2">
+                <div>
+                  <dt className="text-emerald-200/70">مبلغ قابل پرداخت</dt>
+                  <dd className="font-semibold text-emerald-100">
+                    {formattedAmount} {payment.currency}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-emerald-200/70">وضعیت تراکنش</dt>
+                  <dd className="font-semibold text-emerald-100">{formatPaymentStatus(payment.status)}</dd>
+                </div>
+                <div>
+                  <dt className="text-emerald-200/70">لینک پرداخت</dt>
+                  <dd>
+                    <a
+                      href={payment.paymentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-emerald-300 underline-offset-2 hover:underline"
+                    >
+                      {payment.paymentUrl}
+                    </a>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-emerald-200/70">آخرین بروزرسانی</dt>
+                  <dd className="text-emerald-100/80">
+                    {new Date(payment.requestedAt).toLocaleString('fa-IR')}
+                  </dd>
+                </div>
+              </dl>
+              {pendingPayment && (
+                <p className="mt-3 text-xs text-emerald-200/80">
+                  پس از تکمیل پرداخت، رسید به صورت خودکار ثبت و وضعیت تیم به «پرداخت تکمیل شد» تغییر می‌کند.
+                </p>
+              )}
+              {payment.completedAt && (
+                <p className="mt-3 text-xs text-emerald-200/80">
+                  تاریخ تایید پرداخت: {new Date(payment.completedAt).toLocaleString('fa-IR')}
+                </p>
+              )}
+            </div>
+          )}
+          {result.notifications.length > 0 && (
+            <div>
+              <h4 className="font-medium text-slate-200">اعلان‌های ارسال‌شده</h4>
+              <ul className="mt-2 space-y-2 text-xs text-slate-300">
+                {result.notifications.map((notification) => (
+                  <li key={notification.id} className="rounded-lg border border-slate-800/70 bg-slate-900/50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium text-slate-100">{notification.subject}</span>
+                      <span className="text-slate-400">
+                        {formatChannel(notification.channel)} — {new Date(notification.sentAt).toLocaleString('fa-IR')}
+                      </span>
+                    </div>
+                    <p className="mt-2 leading-relaxed text-slate-300">{notification.message}</p>
+                    <p className="mt-1 text-slate-400">گیرنده: {notification.recipient}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-3">
           <button
@@ -525,7 +626,7 @@ export default function ParticipantRegistrationPage() {
               setStep(0);
               setUploadingDocuments({});
             }}
-            disabled={isFinalized}
+            disabled={!canEdit}
             className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500"
           >
             ویرایش اطلاعات
@@ -537,7 +638,7 @@ export default function ParticipantRegistrationPage() {
           >
             ثبت‌نام جدید
           </button>
-          {!isFinalized && (
+          {canFinalize && (
             <button
               type="button"
               onClick={async () => {
@@ -564,6 +665,22 @@ export default function ParticipantRegistrationPage() {
             >
               {finalizing ? 'در حال تأیید...' : 'تأیید نهایی'}
             </button>
+          )}
+          <a
+            href={`/dashboard/registration?id=${result.id}`}
+            className="inline-flex items-center justify-center rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800/60"
+          >
+            مشاهده داشبورد وضعیت
+          </a>
+          {pendingPayment && (
+            <a
+              href={payment?.paymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-400"
+            >
+              پرداخت آنلاین
+            </a>
           )}
         </div>
       </div>

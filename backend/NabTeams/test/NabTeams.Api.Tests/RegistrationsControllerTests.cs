@@ -17,10 +17,12 @@ public class RegistrationsControllerTests
 {
     private static RegistrationsController CreateController(
         Mock<IRegistrationRepository> repository,
-        Mock<IRegistrationDocumentStorage>? storage = null)
+        Mock<IRegistrationDocumentStorage>? storage = null,
+        Mock<IRegistrationWorkflowService>? workflow = null)
     {
         storage ??= new Mock<IRegistrationDocumentStorage>();
-        return new RegistrationsController(repository.Object, storage.Object);
+        workflow ??= new Mock<IRegistrationWorkflowService>();
+        return new RegistrationsController(repository.Object, storage.Object, workflow.Object);
     }
 
     [Fact]
@@ -193,5 +195,45 @@ public class RegistrationsControllerTests
         var payload = Assert.IsType<RegistrationsController.ParticipantRegistrationResponse>(ok.Value);
         Assert.Equal(RegistrationStatus.Finalized, payload.Status);
         repository.Verify(r => r.FinalizeParticipantAsync(registrationId, null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ApproveParticipantAsync_ReturnsValidationProblem_WhenAmountInvalid()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        var workflow = new Mock<IRegistrationWorkflowService>(MockBehavior.Strict);
+        var controller = CreateController(repository, workflow: workflow);
+
+        var request = new RegistrationsController.ParticipantApprovalRequest
+        {
+            Amount = 0,
+            Recipient = "team@example.com",
+            ReturnUrl = "https://example.com/return"
+        };
+
+        var result = await controller.ApproveParticipantAsync(Guid.NewGuid(), request, CancellationToken.None);
+
+        var validation = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, validation.StatusCode);
+        workflow.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task CompleteParticipantPaymentAsync_ReturnsNotFound_WhenWorkflowReturnsNull()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        var workflow = new Mock<IRegistrationWorkflowService>();
+        workflow
+            .Setup(w => w.CompleteParticipantPaymentAsync(It.IsAny<Guid>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ParticipantRegistration?)null);
+
+        var controller = CreateController(repository, workflow: workflow);
+
+        var result = await controller.CompleteParticipantPaymentAsync(
+            Guid.NewGuid(),
+            new RegistrationsController.ParticipantPaymentCompletionRequest(),
+            CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
     }
 }
