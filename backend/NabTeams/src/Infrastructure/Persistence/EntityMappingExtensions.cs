@@ -192,6 +192,10 @@ public static class EntityMappingExtensions
             Notifications = (entity.Notifications ?? new List<RegistrationNotificationEntity>())
                 .OrderByDescending(n => n.SentAt)
                 .Select(n => n.ToModel())
+                .ToList(),
+            BusinessPlanReviews = (entity.BusinessPlanReviews ?? new List<BusinessPlanReviewEntity>())
+                .OrderByDescending(r => r.CreatedAt)
+                .Select(r => r.ToModel())
                 .ToList()
         };
 
@@ -231,6 +235,15 @@ public static class EntityMappingExtensions
                 var notificationEntity = n.ToEntity();
                 notificationEntity.ParticipantRegistrationId = entity.Id;
                 return notificationEntity;
+            })
+            .ToList();
+
+        entity.BusinessPlanReviews = model.BusinessPlanReviews
+            .Select(r =>
+            {
+                var reviewEntity = r.ToEntity();
+                reviewEntity.ParticipantRegistrationId = entity.Id;
+                return reviewEntity;
             })
             .ToList();
 
@@ -286,6 +299,15 @@ public static class EntityMappingExtensions
                 return notificationEntity;
             })
             .ToList();
+
+        entity.BusinessPlanReviews = model.BusinessPlanReviews
+            .Select(r =>
+            {
+                var reviewEntity = r.ToEntity();
+                reviewEntity.ParticipantRegistrationId = entity.Id;
+                return reviewEntity;
+            })
+            .ToList();
     }
 
     public static RegistrationPayment ToModel(this RegistrationPaymentEntity entity)
@@ -338,6 +360,40 @@ public static class EntityMappingExtensions
             Subject = model.Subject,
             Message = model.Message,
             SentAt = model.SentAt
+        };
+
+    public static BusinessPlanReview ToModel(this BusinessPlanReviewEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            ParticipantRegistrationId = entity.ParticipantRegistrationId,
+            Status = entity.Status,
+            OverallScore = entity.OverallScore,
+            Summary = entity.Summary,
+            Strengths = entity.Strengths,
+            Risks = entity.Risks,
+            Recommendations = entity.Recommendations,
+            RawResponse = entity.RawResponse,
+            Model = entity.Model,
+            SourceDocumentUrl = entity.SourceDocumentUrl,
+            CreatedAt = entity.CreatedAt
+        };
+
+    public static BusinessPlanReviewEntity ToEntity(this BusinessPlanReview model)
+        => new()
+        {
+            Id = model.Id,
+            ParticipantRegistrationId = model.ParticipantRegistrationId,
+            Status = model.Status,
+            OverallScore = model.OverallScore,
+            Summary = model.Summary,
+            Strengths = model.Strengths,
+            Risks = model.Risks,
+            Recommendations = model.Recommendations,
+            RawResponse = model.RawResponse,
+            Model = model.Model,
+            SourceDocumentUrl = model.SourceDocumentUrl,
+            CreatedAt = model.CreatedAt
         };
 
     public static JudgeRegistration ToModel(this JudgeRegistrationEntity entity)

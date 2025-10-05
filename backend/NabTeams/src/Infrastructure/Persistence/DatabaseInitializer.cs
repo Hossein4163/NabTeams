@@ -149,6 +149,23 @@ public static class DatabaseInitializer
                         Message = "لطفاً هزینه ورود به مرحله دوم را از طریق لینک پرداخت ارسال شده تکمیل کنید.",
                         SentAt = DateTimeOffset.UtcNow.AddHours(-20)
                     }
+                },
+                BusinessPlanReviews = new List<BusinessPlanReviewEntity>
+                {
+                    new BusinessPlanReviewEntity
+                    {
+                        Id = Guid.Parse("1E3C7C6F-8E34-4B6F-B8BB-9F6E2B1AF5A1"),
+                        Status = BusinessPlanReviewStatus.Completed,
+                        OverallScore = 82,
+                        Summary = "طرح کشاورزی هوشمند پتانسیل بازار بالایی دارد و تیم تجربهٔ پیاده‌سازی اولیه را نشان داده است.",
+                        Strengths = "تیم چندتخصصی، تمرکز روی بازار کشاورزی دیجیتال، نمونه اولیه فعال.",
+                        Risks = "وابستگی به داده‌های دولتی و چالش در دسترسی به کشاورزان کوچک.",
+                        Recommendations = "برنامه جذب مشتریان پایلوت در استان‌های مختلف تدوین شود و مدل درآمدی بر اساس اشتراک سالانه مشخص گردد.",
+                        RawResponse = "{\"score\":82,\"summary\":\"...\"}",
+                        Model = "gemini-1.5-pro",
+                        SourceDocumentUrl = "https://example.com/demo/pitch-deck.pdf",
+                        CreatedAt = DateTimeOffset.UtcNow.AddHours(-4)
+                    }
                 }
             };
 

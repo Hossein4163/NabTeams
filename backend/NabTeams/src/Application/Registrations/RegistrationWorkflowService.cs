@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NabTeams.Application.Abstractions;
@@ -12,15 +13,18 @@ public class RegistrationWorkflowService : IRegistrationWorkflowService
     private readonly IRegistrationRepository _repository;
     private readonly IPaymentGateway _paymentGateway;
     private readonly INotificationService _notificationService;
+    private readonly IBusinessPlanAnalyzer _businessPlanAnalyzer;
 
     public RegistrationWorkflowService(
         IRegistrationRepository repository,
         IPaymentGateway paymentGateway,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IBusinessPlanAnalyzer businessPlanAnalyzer)
     {
         _repository = repository;
         _paymentGateway = paymentGateway;
         _notificationService = notificationService;
+        _businessPlanAnalyzer = businessPlanAnalyzer;
     }
 
     public async Task<ParticipantRegistration?> ApproveParticipantAsync(
@@ -109,5 +113,37 @@ public class RegistrationWorkflowService : IRegistrationWorkflowService
         await _repository.AddParticipantNotificationAsync(participantId, notification, cancellationToken);
 
         return await _repository.GetParticipantAsync(participantId, cancellationToken);
+    }
+
+    public async Task<BusinessPlanReview?> AnalyzeBusinessPlanAsync(
+        Guid participantId,
+        BusinessPlanAnalysisOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        var registration = await _repository.GetParticipantAsync(participantId, cancellationToken);
+        if (registration is null)
+        {
+            return null;
+        }
+
+        var attachments = options.AttachmentUrls?.Count > 0
+            ? options.AttachmentUrls
+            : registration.Documents.Select(d => d.FileUrl).ToList();
+
+        var request = new BusinessPlanAnalysisRequest(
+            participantId,
+            options.Narrative,
+            attachments,
+            options.AdditionalContext);
+
+        var review = await _businessPlanAnalyzer.AnalyzeAsync(request, cancellationToken);
+        review = review with
+        {
+            ParticipantRegistrationId = participantId,
+            Status = BusinessPlanReviewStatus.Completed,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        return await _repository.AddBusinessPlanReviewAsync(participantId, review, cancellationToken);
     }
 }

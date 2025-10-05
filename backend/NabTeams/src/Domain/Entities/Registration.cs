@@ -32,6 +32,8 @@ public record ParticipantRegistration
         = null;
     public IReadOnlyCollection<RegistrationNotification> Notifications { get; init; }
         = Array.Empty<RegistrationNotification>();
+    public IReadOnlyCollection<BusinessPlanReview> BusinessPlanReviews { get; init; }
+        = Array.Empty<BusinessPlanReview>();
     public string? AdditionalNotes { get; init; }
         = null;
     public RegistrationStatus Status { get; init; }
@@ -100,6 +102,27 @@ public record RegistrationNotification
     public string Subject { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;
     public DateTimeOffset SentAt { get; init; }
+        = DateTimeOffset.UtcNow;
+}
+
+public record BusinessPlanReview
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid ParticipantRegistrationId { get; init; }
+        = Guid.Empty;
+    public BusinessPlanReviewStatus Status { get; init; }
+        = BusinessPlanReviewStatus.Completed;
+    public decimal? OverallScore { get; init; }
+        = null;
+    public string Summary { get; init; } = string.Empty;
+    public string Strengths { get; init; } = string.Empty;
+    public string Risks { get; init; } = string.Empty;
+    public string Recommendations { get; init; } = string.Empty;
+    public string RawResponse { get; init; } = string.Empty;
+    public string Model { get; init; } = string.Empty;
+    public string? SourceDocumentUrl { get; init; }
+        = null;
+    public DateTimeOffset CreatedAt { get; init; }
         = DateTimeOffset.UtcNow;
 }
 

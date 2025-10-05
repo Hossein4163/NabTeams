@@ -25,6 +25,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<InvestorRegistrationEntity> InvestorRegistrations => Set<InvestorRegistrationEntity>();
     public DbSet<RegistrationPaymentEntity> RegistrationPayments => Set<RegistrationPaymentEntity>();
     public DbSet<RegistrationNotificationEntity> RegistrationNotifications => Set<RegistrationNotificationEntity>();
+    public DbSet<BusinessPlanReviewEntity> BusinessPlanReviews => Set<BusinessPlanReviewEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +39,7 @@ public class ApplicationDbContext : DbContext
         var registrationStatusConverter = new EnumToStringConverter<RegistrationStatus>();
         var paymentStatusConverter = new EnumToStringConverter<RegistrationPaymentStatus>();
         var notificationChannelConverter = new EnumToStringConverter<NotificationChannel>();
+        var businessPlanStatusConverter = new EnumToStringConverter<BusinessPlanReviewStatus>();
 
         var stringListComparer = new ValueComparer<List<string>>(
             (left, right) => (left ?? new()).SequenceEqual(right ?? new()),
@@ -156,6 +158,11 @@ public class ApplicationDbContext : DbContext
                 .WithOne(e => e.ParticipantRegistration)
                 .HasForeignKey(e => e.ParticipantRegistrationId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.BusinessPlanReviews)
+                .WithOne(e => e.ParticipantRegistration)
+                .HasForeignKey(e => e.ParticipantRegistrationId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TeamMemberEntity>(entity =>
@@ -201,6 +208,20 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Subject).HasMaxLength(256).IsRequired();
             entity.Property(e => e.Message).HasMaxLength(2048).IsRequired();
             entity.Property(e => e.SentAt).IsRequired();
+        });
+
+        modelBuilder.Entity<BusinessPlanReviewEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Status).HasConversion(businessPlanStatusConverter).IsRequired();
+            entity.Property(e => e.Summary).HasMaxLength(2048).IsRequired();
+            entity.Property(e => e.Strengths).HasMaxLength(2048).IsRequired();
+            entity.Property(e => e.Risks).HasMaxLength(2048).IsRequired();
+            entity.Property(e => e.Recommendations).HasMaxLength(2048).IsRequired();
+            entity.Property(e => e.RawResponse).HasMaxLength(8000);
+            entity.Property(e => e.Model).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.SourceDocumentUrl).HasMaxLength(512);
+            entity.Property(e => e.CreatedAt).IsRequired();
         });
 
         modelBuilder.Entity<JudgeRegistrationEntity>(entity =>
@@ -344,6 +365,7 @@ public class ParticipantRegistrationEntity
     public RegistrationPaymentEntity? Payment { get; set; }
         = null;
     public List<RegistrationNotificationEntity> Notifications { get; set; } = new();
+    public List<BusinessPlanReviewEntity> BusinessPlanReviews { get; set; } = new();
 }
 
 public class TeamMemberEntity
@@ -413,6 +435,28 @@ public class RegistrationNotificationEntity
     public string Subject { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public DateTimeOffset SentAt { get; set; }
+        = DateTimeOffset.UtcNow;
+}
+
+public class BusinessPlanReviewEntity
+{
+    public Guid Id { get; set; }
+    public Guid ParticipantRegistrationId { get; set; }
+    public ParticipantRegistrationEntity? ParticipantRegistration { get; set; }
+        = null;
+    public BusinessPlanReviewStatus Status { get; set; }
+        = BusinessPlanReviewStatus.Completed;
+    public decimal? OverallScore { get; set; }
+        = null;
+    public string Summary { get; set; } = string.Empty;
+    public string Strengths { get; set; } = string.Empty;
+    public string Risks { get; set; } = string.Empty;
+    public string Recommendations { get; set; } = string.Empty;
+    public string RawResponse { get; set; } = string.Empty;
+    public string Model { get; set; } = string.Empty;
+    public string? SourceDocumentUrl { get; set; }
+        = null;
+    public DateTimeOffset CreatedAt { get; set; }
         = DateTimeOffset.UtcNow;
 }
 

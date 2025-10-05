@@ -22,11 +22,18 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 | `ConnectionStrings__DefaultConnection`                          | بک‌اند      | رشته اتصال PostgreSQL (پیش‌فرض: `Host=localhost;Port=5432;Database=nabteams;Username=nabteams;Password=nabteams`) |
 | `Gemini__ApiKey`                                                | بک‌اند      | کلید دسترسی Google Gemini. در صورت خالی بودن، سرویس‌ها به حالت Rule-based برمی‌گردند.                             |
 | `Gemini__ModerationModel`, `Gemini__RagModel`                   | بک‌اند      | نام مدل برای Moderation/RAG. پیش‌فرض: `gemini-1.5-pro`.                                                           |
+| `Gemini__BusinessPlanModel`, `Gemini__BusinessPlanTemperature`  | بک‌اند      | مدل و دمای تولید متن برای تحلیل بیزینس‌پلن (پیش‌فرض `gemini-1.5-pro` و `0.2`).                                     |
+| `Gemini__BaseUrl`                                               | بک‌اند      | آدرس پایه API Gemini؛ در صورت استفاده از پروکسی می‌توان مقداردهی کرد.                                             |
 | `Authentication__Authority`                                     | بک‌اند      | آدرس سرور SSO/OIDC.                                                                                               |
 | `Authentication__Audience`                                      | بک‌اند      | Audience توکن JWT.                                                                                                |
 | `Authentication__AdminRole`                                     | بک‌اند      | نام نقش ادمین (پیش‌فرض `admin`).                                                                                  |
 | `Authentication__Disabled`                                      | بک‌اند      | اگر `true` باشد، احراز هویت غیرفعال می‌شود (برای توسعه محلی).                                                     |
-| `Payments__BaseUrl`                                             | بک‌اند      | آدرس پایه برای تولید لینک‌های پرداخت (پیش‌فرض `https://payments.example.com/session`).                           |
+| `Payments__BaseUrl`                                             | بک‌اند      | آدرس پایه ارائه‌دهنده پرداخت (پیش‌فرض `https://api.idpay.ir`).                                                    |
+| `Payments__ApiKey`                                              | بک‌اند      | کلید API درگاه پرداخت.                                                                                             |
+| `Payments__CallbackBaseUrl`                                     | بک‌اند      | آدرس پابلیک برای بازگشت از درگاه (مثلاً `https://portal.example.com`).                                            |
+| `Payments__Sandbox`                                             | بک‌اند      | اگر `true` باشد هدر Sandbox برای IdPay فعال می‌شود.                                                                |
+| `Notification__Email__Host`, `Notification__Email__Username`, `Notification__Email__Password` | بک‌اند | تنظیمات SMTP برای ارسال ایمیل (همراه با `Notification__Email__SenderAddress`).                                    |
+| `Notification__Sms__ApiKey`, `Notification__Sms__BaseUrl`, `Notification__Sms__SenderNumber` | بک‌اند | تنظیمات Gateway پیامک (پیش‌فرض برای Kavenegar).                                                                    |
 | `NEXTAUTH_URL`                                                  | فرانت‌اند   | آدرس پابلیک اپ Next.js (مثلاً `http://localhost:3000`).                                                           |
 | `NEXTAUTH_SECRET`                                               | فرانت‌اند   | کلید رمزنگاری سشن NextAuth.                                                                                       |
 | `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_SCOPE` | فرانت‌اند   | تنظیمات ارائه‌دهنده OIDC برای NextAuth. اگر مقداردهی نشود و `AUTH_ALLOW_DEV=true` باشد، ورود آزمایشی فعال می‌شود. |
@@ -65,6 +72,8 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 - `POST /api/registrations/participants/{id}/finalize` — تأیید نهایی ثبت‌نام توسط تیم.
 - `POST /api/registrations/participants/{id}/approve` — تایید ادمین، ایجاد لینک پرداخت و ارسال اعلان.
 - `POST /api/registrations/participants/{id}/payments/complete` — ثبت موفقیت پرداخت و ارسال اعلان تایید.
+- `POST /api/registrations/participants/{id}/analysis` — ارسال طرح کسب‌وکار برای تحلیل هوش مصنوعی و دریافت امتیاز و پیشنهادها.
+- `GET /api/registrations/participants/{id}/analysis` — فهرست تحلیل‌های انجام‌شده برای تیم.
 - `POST /api/support/query` — پاسخ دانشی (RAG) با Gemini.
 - `POST /api/registrations/participants/uploads` — بارگذاری مدارک ثبت‌نام و دریافت لینک قابل‌دانلود.
 - `GET/POST/DELETE /api/knowledge-base` — مدیریت منابع دانش توسط ادمین.
@@ -94,6 +103,8 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 - **پشتیبانی دانشی RAG:** Gemini پاسخ را بر اساس منابع مدیریت‌شده توسط ادمین (به همراه Confidence و منابع استناد) تولید می‌کند. در نبود API Key الگوریتم رتبه‌بندی داخلی استفاده می‌شود.
 - **فرانت‌اند راست‌به‌چپ با نقش‌محوری:** داشبورد Next.js شامل مدیریت نقش، چت، پشتیبانی، مدیریت دانش و اعتراض‌ها است. جلسات NextAuth نقش‌های کاربر را به صورت Context در اختیار تمام اجزا قرار می‌دهد.
 - **هاردنینگ امنیتی و عملیاتی:** هدرهای امنیتی پیش‌فرض، فشرده‌سازی پاسخ، متریک‌های Prometheus و Logهای HTTP برای مانیتورینگ و مقابله با تهدیدات فعال هستند. دستورالعمل کامل در `docs/operations-runbook.md` موجود است.
+- **درگاه پرداخت واقعی:** سرویس گردش‌کار ثبت‌نام از IdPay (یا هر درگاه RESTful سازگار) لینک پرداخت دریافت می‌کند، وضعیت تراکنش را نگه می‌دارد و اعلان ایمیل/پیامک واقعی ارسال می‌کند.
+- **تحلیل بیزینس‌پلن با Gemini:** تیم‌ها می‌توانند خلاصه طرح خود را ارسال کنند تا هوش مصنوعی خلاصه، نقاط قوت/ریسک و پیشنهادهای بهبود را به همراه امتیاز بازگرداند؛ نتایج در داشبورد ثبت‌نام نمایش داده می‌شود.
 
 ## نکات توسعه
 
@@ -111,6 +122,10 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 - هنگام استقرار فرانت‌اند، `NEXTAUTH_URL` باید آدرس نهایی (HTTPS) باشد تا تبادل سشن به درستی انجام گیرد.
 
 برای توسعه بیشتر می‌توانید به سند `implementation_plan.md` مراجعه کنید که ریزمعماری و جریان‌های فرایندی را شرح می‌دهد.
+
+## راهنمای استفاده
+
+برای آشنایی با نحوه ثبت‌نام، پیگیری وضعیت، پرداخت و دریافت تحلیل هوش مصنوعی از طرح کسب‌وکار، فایل [`docs/user-guide.md`](docs/user-guide.md) را مطالعه کنید.
 
 ## Hardening & QA
 

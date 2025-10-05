@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using OpenTelemetry.Exporter.Prometheus.AspNetCore;
 using OpenTelemetry.Metrics;
@@ -74,12 +75,57 @@ builder.Services.AddHttpLogging(logging =>
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSection("Authentication"));
 builder.Services.Configure<PaymentGatewayOptions>(builder.Configuration.GetSection("Payments"));
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notification"));
 var authenticationSettings = builder.Configuration.GetSection("Authentication").Get<AuthenticationSettings>() ?? new AuthenticationSettings { Disabled = true };
 
-builder.Services.AddHttpClient("gemini", client =>
+builder.Services.AddHttpClient<GeminiBusinessPlanAnalyzer>((sp, client) =>
     {
-        var options = builder.Configuration.GetSection("Gemini").Get<GeminiOptions>() ?? new GeminiOptions();
-        client.BaseAddress = new Uri(options.Endpoint.TrimEnd('/') + "/");
+        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+            ? "https://generativelanguage.googleapis.com"
+            : options.BaseUrl.TrimEnd('/');
+        client.BaseAddress = new Uri(baseUrl + "/");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        client.Timeout = TimeSpan.FromSeconds(20);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+builder.Services.AddHttpClient<IdPayPaymentGateway>((sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<PaymentGatewayOptions>>().Value;
+        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+            ? "https://api.idpay.ir"
+            : options.BaseUrl.TrimEnd('/');
+        client.BaseAddress = new Uri(baseUrl + "/");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        client.Timeout = TimeSpan.FromSeconds(20);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+builder.Services.AddHttpClient("notifications.sms", (sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<NotificationOptions>>().Value;
+        if (!string.IsNullOrWhiteSpace(options.Sms.BaseUrl))
+        {
+            client.BaseAddress = new Uri(options.Sms.BaseUrl.TrimEnd('/') + "/");
+        }
+        client.Timeout = TimeSpan.FromSeconds(10);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+builder.Services.AddHttpClient("gemini", (sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+        var endpoint = string.IsNullOrWhiteSpace(options.Endpoint)
+            ? "https://generativelanguage.googleapis.com/v1beta"
+            : options.Endpoint.TrimEnd('/');
+        client.BaseAddress = new Uri(endpoint + "/");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         client.Timeout = TimeSpan.FromSeconds(15);
     })
@@ -134,8 +180,9 @@ builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
 builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
 builder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();
-builder.Services.AddSingleton<INotificationService, FakeNotificationService>();
-builder.Services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
+builder.Services.AddScoped<INotificationService, ExternalNotificationService>();
+builder.Services.AddScoped<IPaymentGateway>(sp => sp.GetRequiredService<IdPayPaymentGateway>());
+builder.Services.AddScoped<IBusinessPlanAnalyzer>(sp => sp.GetRequiredService<GeminiBusinessPlanAnalyzer>());
 builder.Services.AddScoped<IRegistrationWorkflowService, RegistrationWorkflowService>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
@@ -199,6 +246,8 @@ if (!app.Environment.IsDevelopment())
 app.UseResponseCompression();
 app.UseSecurityHeaders();
 app.UseStaticFiles(registrationDocumentStaticFiles);
+
+app.UseStaticFiles();
 
 app.UseStaticFiles();
 

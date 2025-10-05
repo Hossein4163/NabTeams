@@ -17,6 +17,8 @@ export type RegistrationPaymentStatus = 'Pending' | 'Completed' | 'Failed' | 'Ca
 
 export type NotificationChannel = 'Email' | 'Sms';
 
+export type BusinessPlanReviewStatus = 'Pending' | 'Completed' | 'Failed';
+
 export interface SessionUserInfo {
   id?: string | null;
   email?: string | null;
@@ -298,6 +300,7 @@ export interface ParticipantRegistrationResponse {
   links: Array<ParticipantLinkInput & { id: string; label: string }>;
   payment: ParticipantPayment | null;
   notifications: ParticipantNotification[];
+  businessPlanReviews: BusinessPlanReview[];
 }
 
 export interface ParticipantPayment {
@@ -318,6 +321,19 @@ export interface ParticipantNotification {
   subject: string;
   message: string;
   sentAt: string;
+}
+
+export interface BusinessPlanReview {
+  id: string;
+  status: BusinessPlanReviewStatus;
+  overallScore: number | null;
+  summary: string;
+  strengths: string;
+  risks: string;
+  recommendations: string;
+  sourceDocumentUrl: string | null;
+  model: string;
+  createdAt: string;
 }
 
 export async function submitParticipantRegistration(
@@ -397,6 +413,40 @@ export async function completeParticipantPayment(
     method: 'POST',
     ...auth,
     body: JSON.stringify(payload)
+  });
+}
+
+export interface BusinessPlanAnalysisPayload {
+  narrative: string;
+  additionalContext?: string | null;
+  attachmentUrls?: string[];
+}
+
+export async function requestBusinessPlanAnalysis(
+  id: string,
+  payload: BusinessPlanAnalysisPayload,
+  auth?: AuthContext
+): Promise<BusinessPlanReview> {
+  const body = {
+    narrative: payload.narrative,
+    additionalContext: payload.additionalContext ?? null,
+    attachmentUrls: payload.attachmentUrls ?? []
+  };
+
+  return apiFetch<BusinessPlanReview>(`/api/registrations/participants/${id}/analysis`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(body)
+  });
+}
+
+export async function fetchBusinessPlanReviews(
+  id: string,
+  auth?: AuthContext
+): Promise<BusinessPlanReview[]> {
+  return apiFetch<BusinessPlanReview[]>(`/api/registrations/participants/${id}/analysis`, {
+    method: 'GET',
+    ...auth
   });
 }
 

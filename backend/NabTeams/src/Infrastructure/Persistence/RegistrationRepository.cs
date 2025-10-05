@@ -3,6 +3,7 @@ using NabTeams.Application.Abstractions;
 using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace NabTeams.Infrastructure.Persistence;
@@ -33,6 +34,7 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Links)
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
+            .Include(x => x.BusinessPlanReviews)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         return entity?.ToModel();
@@ -47,6 +49,7 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Links)
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
+            .Include(x => x.BusinessPlanReviews)
             .OrderByDescending(x => x.FinalizedAt ?? x.SubmittedAt)
             .Take(200)
             .ToListAsync(cancellationToken);
@@ -65,6 +68,7 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Links)
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
+            .Include(x => x.BusinessPlanReviews)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)
@@ -107,6 +111,7 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Links)
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
+            .Include(x => x.BusinessPlanReviews)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)
@@ -140,6 +145,7 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Links)
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
+            .Include(x => x.BusinessPlanReviews)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)
@@ -228,6 +234,44 @@ public class EfRegistrationRepository : IRegistrationRepository
         _dbContext.RegistrationNotifications.Add(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return entity.ToModel();
+    }
+
+    public async Task<BusinessPlanReview> AddBusinessPlanReviewAsync(
+        Guid participantId,
+        BusinessPlanReview review,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = review.ToEntity();
+        entity.ParticipantRegistrationId = participantId;
+        entity.CreatedAt = DateTimeOffset.UtcNow;
+        _dbContext.BusinessPlanReviews.Add(entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.ToModel();
+    }
+
+    public async Task<IReadOnlyCollection<BusinessPlanReview>> ListBusinessPlanReviewsAsync(
+        Guid participantId,
+        CancellationToken cancellationToken = default)
+    {
+        var entities = await _dbContext.BusinessPlanReviews
+            .AsNoTracking()
+            .Where(r => r.ParticipantRegistrationId == participantId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(r => r.ToModel()).ToList();
+    }
+
+    public async Task<BusinessPlanReview?> GetBusinessPlanReviewAsync(
+        Guid participantId,
+        Guid reviewId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.BusinessPlanReviews
+            .AsNoTracking()
+            .SingleOrDefaultAsync(r => r.ParticipantRegistrationId == participantId && r.Id == reviewId, cancellationToken);
+
+        return entity?.ToModel();
     }
 
     public async Task<JudgeRegistration> AddJudgeAsync(JudgeRegistration registration, CancellationToken cancellationToken = default)

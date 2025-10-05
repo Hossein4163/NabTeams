@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -235,5 +236,134 @@ public class RegistrationsControllerTests
             CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AnalyzeBusinessPlanAsync_ReturnsValidationProblem_WhenNarrativeEmpty()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        var controller = CreateController(repository);
+
+        var request = new RegistrationsController.BusinessPlanAnalysisRequest
+        {
+            Narrative = string.Empty
+        };
+
+        var result = await controller.AnalyzeBusinessPlanAsync(Guid.NewGuid(), request, CancellationToken.None);
+
+        var validation = Assert.IsType<ObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, validation.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnalyzeBusinessPlanAsync_ReturnsNotFound_WhenWorkflowReturnsNull()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        var workflow = new Mock<IRegistrationWorkflowService>();
+        workflow
+            .Setup(w => w.AnalyzeBusinessPlanAsync(It.IsAny<Guid>(), It.IsAny<BusinessPlanAnalysisOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((BusinessPlanReview?)null);
+
+        var controller = CreateController(repository, workflow: workflow);
+
+        var request = new RegistrationsController.BusinessPlanAnalysisRequest
+        {
+            Narrative = "طرح اولیه برای تحلیل"
+        };
+
+        var result = await controller.AnalyzeBusinessPlanAsync(Guid.NewGuid(), request, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task AnalyzeBusinessPlanAsync_ReturnsReview_WhenWorkflowSucceeds()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        var workflow = new Mock<IRegistrationWorkflowService>();
+        var registrationId = Guid.NewGuid();
+        var review = new BusinessPlanReview
+        {
+            Id = Guid.NewGuid(),
+            ParticipantRegistrationId = registrationId,
+            Status = BusinessPlanReviewStatus.Completed,
+            Summary = "طرح قابل قبول است.",
+            Strengths = "تیم چند تخصصی",
+            Risks = "هزینه بازاریابی",
+            Recommendations = "افزایش تحقیقات بازار",
+            Model = "gemini-1.5-pro",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        workflow
+            .Setup(w => w.AnalyzeBusinessPlanAsync(registrationId, It.IsAny<BusinessPlanAnalysisOptions>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(review);
+
+        var controller = CreateController(repository, workflow: workflow);
+
+        var request = new RegistrationsController.BusinessPlanAnalysisRequest
+        {
+            Narrative = "شرح مدل کسب‌وکار"
+        };
+
+        var result = await controller.AnalyzeBusinessPlanAsync(registrationId, request, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<RegistrationsController.BusinessPlanReviewResponse>(ok.Value);
+        Assert.Equal(review.Id, payload.Id);
+        workflow.Verify(w => w.AnalyzeBusinessPlanAsync(registrationId, It.IsAny<BusinessPlanAnalysisOptions>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ListBusinessPlanReviewsAsync_ReturnsNotFound_WhenParticipantMissing()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        repository
+            .Setup(r => r.GetParticipantAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ParticipantRegistration?)null);
+
+        var controller = CreateController(repository);
+
+        var result = await controller.ListBusinessPlanReviewsAsync(Guid.NewGuid(), CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task ListBusinessPlanReviewsAsync_ReturnsReviews_WhenAvailable()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        var registrationId = Guid.NewGuid();
+        repository
+            .Setup(r => r.GetParticipantAsync(registrationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ParticipantRegistration { Id = registrationId, TeamName = "Demo" });
+
+        var reviews = new List<BusinessPlanReview>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                ParticipantRegistrationId = registrationId,
+                Status = BusinessPlanReviewStatus.Completed,
+                Summary = "خلاصه",
+                Strengths = "قدرت",
+                Risks = "ریسک",
+                Recommendations = "پیشنهاد",
+                Model = "gemini",
+                CreatedAt = DateTimeOffset.UtcNow
+            }
+        };
+
+        repository
+            .Setup(r => r.ListBusinessPlanReviewsAsync(registrationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(reviews);
+
+        var controller = CreateController(repository);
+
+        var result = await controller.ListBusinessPlanReviewsAsync(registrationId, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<List<RegistrationsController.BusinessPlanReviewResponse>>(ok.Value);
+        Assert.Single(payload);
     }
 }

@@ -42,3 +42,10 @@ public enum NotificationChannel
     Email,
     Sms
 }
+
+public enum BusinessPlanReviewStatus
+{
+    Pending,
+    Completed,
+    Failed
+}

@@ -531,6 +531,65 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.ToTable("RegistrationNotifications");
             });
 
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.BusinessPlanReviewEntity", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("Model")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<decimal?>("OverallScore")
+                    .HasColumnType("numeric(18,2)");
+
+                b.Property<Guid>("ParticipantRegistrationId")
+                    .HasColumnType("uuid");
+
+                b.Property<string>("RawResponse")
+                    .HasMaxLength(8000)
+                    .HasColumnType("character varying(8000)");
+
+                b.Property<string>("Recommendations")
+                    .IsRequired()
+                    .HasMaxLength(2048)
+                    .HasColumnType("character varying(2048)");
+
+                b.Property<string>("Risks")
+                    .IsRequired()
+                    .HasMaxLength(2048)
+                    .HasColumnType("character varying(2048)");
+
+                b.Property<string>("SourceDocumentUrl")
+                    .HasMaxLength(512)
+                    .HasColumnType("character varying(512)");
+
+                b.Property<BusinessPlanReviewStatus>("Status")
+                    .HasColumnType("text")
+                    .HasConversion<string>();
+
+                b.Property<string>("Strengths")
+                    .IsRequired()
+                    .HasMaxLength(2048)
+                    .HasColumnType("character varying(2048)");
+
+                b.Property<string>("Summary")
+                    .IsRequired()
+                    .HasMaxLength(2048)
+                    .HasColumnType("character varying(2048)");
+
+                b.HasKey("Id");
+
+                b.HasIndex("ParticipantRegistrationId");
+
+                b.ToTable("BusinessPlanReviews");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", b =>
             {
                 b.Property<Guid>("Id")
@@ -676,6 +735,17 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.Navigation("ParticipantRegistration");
             });
 
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.BusinessPlanReviewEntity", b =>
+            {
+                b.HasOne("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", "ParticipantRegistration")
+                    .WithMany("BusinessPlanReviews")
+                    .HasForeignKey("ParticipantRegistrationId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("ParticipantRegistration");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", b =>
             {
                 b.HasOne("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", "ParticipantRegistration")
@@ -700,6 +770,8 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", b =>
             {
+                b.Navigation("BusinessPlanReviews");
+
                 b.Navigation("Documents");
 
                 b.Navigation("Links");

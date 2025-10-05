@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
@@ -253,6 +254,82 @@ public class RegistrationsController : ControllerBase
         }
 
         return Ok(ParticipantRegistrationResponse.FromDomain(result));
+    }
+
+    [HttpPost("participants/{id:guid}/analysis")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "تحلیل بیزینس‌پلن توسط هوش مصنوعی", Description = "Narrative طرح کسب‌وکار را به سرویس هوش مصنوعی ارسال کرده و بازخورد ساختاریافته دریافت می‌کند.")]
+    [ProducesResponseType(typeof(BusinessPlanReviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BusinessPlanReviewResponse>> AnalyzeBusinessPlanAsync(
+        Guid id,
+        [FromBody] BusinessPlanAnalysisRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Narrative))
+        {
+            ModelState.AddModelError(nameof(request.Narrative), "ارائهٔ توضیحات طرح الزامی است.");
+            return ValidationProblem(ModelState);
+        }
+
+        var attachmentUrls = request.AttachmentUrls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+
+        var options = new BusinessPlanAnalysisOptions(
+            request.Narrative.Trim(),
+            attachmentUrls,
+            string.IsNullOrWhiteSpace(request.AdditionalContext) ? null : request.AdditionalContext.Trim());
+
+        var review = await _workflowService.AnalyzeBusinessPlanAsync(id, options, cancellationToken);
+        if (review is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(BusinessPlanReviewResponse.FromDomain(review));
+    }
+
+    [HttpGet("participants/{id:guid}/analysis")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "لیست تحلیل‌های بیزینس‌پلن", Description = "تمام تحلیل‌های انجام‌شده توسط هوش مصنوعی برای یک تیم را برمی‌گرداند.")]
+    [ProducesResponseType(typeof(IReadOnlyCollection<BusinessPlanReviewResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyCollection<BusinessPlanReviewResponse>>> ListBusinessPlanReviewsAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var registration = await _repository.GetParticipantAsync(id, cancellationToken);
+        if (registration is null)
+        {
+            return NotFound();
+        }
+
+        var reviews = await _repository.ListBusinessPlanReviewsAsync(id, cancellationToken);
+        var response = reviews.Select(BusinessPlanReviewResponse.FromDomain).ToList();
+        return Ok(response);
+    }
+
+    [HttpGet("participants/{id:guid}/analysis/{reviewId:guid}")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "دریافت جزئیات یک تحلیل بیزینس‌پلن", Description = "تحلیل مشخص‌شده را بر اساس شناسهٔ آن بازمی‌گرداند.")]
+    [ProducesResponseType(typeof(BusinessPlanReviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BusinessPlanReviewResponse>> GetBusinessPlanReviewAsync(
+        Guid id,
+        Guid reviewId,
+        CancellationToken cancellationToken)
+    {
+        var review = await _repository.GetBusinessPlanReviewAsync(id, reviewId, cancellationToken);
+        if (review is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(BusinessPlanReviewResponse.FromDomain(review));
     }
 
     [HttpPost("judges")]
@@ -692,6 +769,19 @@ public class RegistrationsController : ControllerBase
             = null;
     }
 
+    public record BusinessPlanAnalysisRequest
+    {
+        [Required]
+        [MaxLength(12000)]
+        public string Narrative { get; init; } = string.Empty;
+
+        [MaxLength(2000)]
+        public string? AdditionalContext { get; init; }
+            = null;
+
+        public IList<string> AttachmentUrls { get; init; } = new List<string>();
+    }
+
     public record ParticipantRegistrationSummaryResponse
     {
         public Guid Id { get; init; }
@@ -705,6 +795,8 @@ public class RegistrationsController : ControllerBase
             = null;
         public DateTimeOffset SubmittedAt { get; init; }
             = DateTimeOffset.UtcNow;
+        public decimal? LatestBusinessPlanScore { get; init; }
+            = null;
 
         public static ParticipantRegistrationSummaryResponse FromDomain(ParticipantRegistration registration)
             => new()
@@ -715,7 +807,8 @@ public class RegistrationsController : ControllerBase
                 TeamCompleted = registration.TeamCompleted,
                 Status = registration.Status,
                 FinalizedAt = registration.FinalizedAt,
-                SubmittedAt = registration.SubmittedAt
+                SubmittedAt = registration.SubmittedAt,
+                LatestBusinessPlanScore = registration.BusinessPlanReviews.FirstOrDefault()?.OverallScore
             };
     }
 
@@ -757,6 +850,8 @@ public class RegistrationsController : ControllerBase
             = null;
         public IReadOnlyCollection<ParticipantNotificationResponse> Notifications { get; init; }
             = Array.Empty<ParticipantNotificationResponse>();
+        public IReadOnlyCollection<BusinessPlanReviewResponse> BusinessPlanReviews { get; init; }
+            = Array.Empty<BusinessPlanReviewResponse>();
 
         public static ParticipantRegistrationResponse FromDomain(ParticipantRegistration registration)
             => new()
@@ -792,6 +887,9 @@ public class RegistrationsController : ControllerBase
                     : ParticipantPaymentResponse.FromDomain(registration.Payment),
                 Notifications = registration.Notifications
                     .Select(ParticipantNotificationResponse.FromDomain)
+                    .ToList(),
+                BusinessPlanReviews = registration.BusinessPlanReviews
+                    .Select(BusinessPlanReviewResponse.FromDomain)
                     .ToList()
             };
     }
@@ -898,6 +996,38 @@ public class RegistrationsController : ControllerBase
                 Subject = notification.Subject,
                 Message = notification.Message,
                 SentAt = notification.SentAt
+            };
+    }
+
+    public record BusinessPlanReviewResponse
+    {
+        public Guid Id { get; init; }
+        public BusinessPlanReviewStatus Status { get; init; } = BusinessPlanReviewStatus.Completed;
+        public decimal? OverallScore { get; init; }
+            = null;
+        public string Summary { get; init; } = string.Empty;
+        public string Strengths { get; init; } = string.Empty;
+        public string Risks { get; init; } = string.Empty;
+        public string Recommendations { get; init; } = string.Empty;
+        public string? SourceDocumentUrl { get; init; }
+            = null;
+        public string Model { get; init; } = string.Empty;
+        public DateTimeOffset CreatedAt { get; init; }
+            = DateTimeOffset.UtcNow;
+
+        public static BusinessPlanReviewResponse FromDomain(BusinessPlanReview review)
+            => new()
+            {
+                Id = review.Id,
+                Status = review.Status,
+                OverallScore = review.OverallScore,
+                Summary = review.Summary,
+                Strengths = review.Strengths,
+                Risks = review.Risks,
+                Recommendations = review.Recommendations,
+                SourceDocumentUrl = review.SourceDocumentUrl,
+                Model = review.Model,
+                CreatedAt = review.CreatedAt
             };
     }
 

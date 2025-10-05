@@ -14,6 +14,9 @@ public interface IRegistrationRepository
     Task<RegistrationPayment> SaveParticipantPaymentAsync(Guid participantId, RegistrationPayment payment, CancellationToken cancellationToken = default);
     Task<RegistrationPayment?> UpdateParticipantPaymentStatusAsync(Guid participantId, RegistrationPaymentStatus status, string? gatewayReference, CancellationToken cancellationToken = default);
     Task<RegistrationNotification> AddParticipantNotificationAsync(Guid participantId, RegistrationNotification notification, CancellationToken cancellationToken = default);
+    Task<BusinessPlanReview> AddBusinessPlanReviewAsync(Guid participantId, BusinessPlanReview review, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<BusinessPlanReview>> ListBusinessPlanReviewsAsync(Guid participantId, CancellationToken cancellationToken = default);
+    Task<BusinessPlanReview?> GetBusinessPlanReviewAsync(Guid participantId, Guid reviewId, CancellationToken cancellationToken = default);
 
     Task<JudgeRegistration> AddJudgeAsync(JudgeRegistration registration, CancellationToken cancellationToken = default);
     Task<JudgeRegistration?> GetJudgeAsync(Guid id, CancellationToken cancellationToken = default);
