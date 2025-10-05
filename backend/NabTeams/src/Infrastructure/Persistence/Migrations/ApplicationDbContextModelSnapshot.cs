@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 

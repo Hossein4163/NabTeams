@@ -15,7 +15,6 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
-using OpenTelemetry.Exporter.Prometheus.AspNetCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using Polly;
@@ -38,6 +37,8 @@ using NabTeams.Web.Configuration;
 using NabTeams.Web.Hubs;
 using NabTeams.Web.Middleware;
 using Swashbuckle.AspNetCore.Annotations;
+using NotificationOptions = NabTeams.Infrastructure.Services.NotificationOptions;
+using PaymentGatewayOptions = NabTeams.Infrastructure.Services.PaymentGatewayOptions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -243,7 +244,6 @@ builder.Services.AddOpenTelemetry()
         metrics.AddAspNetCoreInstrumentation();
         metrics.AddHttpClientInstrumentation();
         metrics.AddMeter(MetricsRecorder.MeterName);
-        metrics.AddPrometheusExporter();
     });
 
 var app = builder.Build();
@@ -355,7 +355,6 @@ else
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
-app.MapPrometheusScrapingEndpoint();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {

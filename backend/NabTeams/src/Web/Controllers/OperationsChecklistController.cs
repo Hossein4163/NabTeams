@@ -12,7 +12,7 @@ using NabTeams.Application.Abstractions;
 using NabTeams.Application.Operations.Models;
 using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
-using NabTeams.Web.Auth;
+using NabTeams.Web.Configuration;
 
 namespace NabTeams.Web.Controllers;
 

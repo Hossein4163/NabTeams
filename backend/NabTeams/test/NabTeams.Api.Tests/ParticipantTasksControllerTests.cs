@@ -39,7 +39,7 @@ public class ParticipantTasksControllerTests
         var result = await controller.ListAsync(Guid.NewGuid(), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var payload = Assert.IsAssignableFrom<IReadOnlyCollection<ParticipantTasksController.ParticipantTaskResponse>>(ok.Value);
+        var payload = Assert.IsAssignableFrom<IReadOnlyCollection<RegistrationsController.ParticipantTaskResponse>>(ok.Value);
         Assert.Single(payload);
     }
 
@@ -86,7 +86,7 @@ public class ParticipantTasksControllerTests
         var result = await controller.CreateAsync(participantId, request, CancellationToken.None);
 
         var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var payload = Assert.IsType<ParticipantTasksController.ParticipantTaskResponse>(created.Value);
+        var payload = Assert.IsType<RegistrationsController.ParticipantTaskResponse>(created.Value);
         Assert.Equal(task.Title, payload.Title);
     }
 
