@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
 
 namespace NabTeams.Infrastructure.Persistence;
@@ -298,6 +299,93 @@ public static class DatabaseInitializer
                     IsActive = true,
                     CreatedAt = now,
                     UpdatedAt = now
+                }
+            });
+
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        if (!await context.OperationsChecklistItems.AnyAsync(cancellationToken))
+        {
+            var checklistCreatedAt = DateTimeOffset.UtcNow;
+            context.OperationsChecklistItems.AddRange(new[]
+            {
+                new OperationsChecklistItemEntity
+                {
+                    Id = Guid.Parse("A32B21F1-2E57-4D1E-8D03-3E42B8D78211"),
+                    Key = "security-scan",
+                    Title = "اسکن امنیتی OWASP ZAP",
+                    Description = "اجرای اسکریپت zap-baseline و مستندسازی نتایج بدون مورد High.",
+                    Category = "امنیت",
+                    Status = OperationsChecklistStatus.Pending,
+                    CreatedAt = checklistCreatedAt,
+                    UpdatedAt = checklistCreatedAt
+                },
+                new OperationsChecklistItemEntity
+                {
+                    Id = Guid.Parse("B45AC6DF-5D94-4D1F-8F6C-FD7FA71C1F23"),
+                    Key = "monitoring-alerts",
+                    Title = "پیکربندی هشدارهای مانیتورینگ",
+                    Description = "اتصال متریک‌ها به Prometheus و تنظیم هشدار برای شاخص‌های کلیدی.",
+                    Category = "عملیاتی",
+                    Status = OperationsChecklistStatus.Pending,
+                    CreatedAt = checklistCreatedAt,
+                    UpdatedAt = checklistCreatedAt
+                },
+                new OperationsChecklistItemEntity
+                {
+                    Id = Guid.Parse("C56B77E8-4A15-4DF0-9D54-8F0D3FB49318"),
+                    Key = "operator-training",
+                    Title = "آموزش اپراتورها",
+                    Description = "تمرین سناریوهای قطع سرویس AI و پردازش اعتراضات طبق Runbook.",
+                    Category = "عملیاتی",
+                    Status = OperationsChecklistStatus.Pending,
+                    CreatedAt = checklistCreatedAt,
+                    UpdatedAt = checklistCreatedAt
+                },
+                new OperationsChecklistItemEntity
+                {
+                    Id = Guid.Parse("D67889F9-7F1A-43F2-94C3-8D42B5F5C3C2"),
+                    Key = "load-test",
+                    Title = "اجرای تست بار",
+                    Description = "اجرای اسکریپت chat-smoke و ثبت نتایج در Runbook.",
+                    Category = "کارایی",
+                    Status = OperationsChecklistStatus.Pending,
+                    CreatedAt = checklistCreatedAt,
+                    UpdatedAt = checklistCreatedAt
+                },
+                new OperationsChecklistItemEntity
+                {
+                    Id = Guid.Parse("E7899A0A-82C5-4C7A-9C19-A00D5F3B54B2"),
+                    Key = "integrations-config",
+                    Title = "تنظیم کلیدهای یکپارچه‌سازی",
+                    Description = "فعال‌سازی کلیدهای تولیدی برای Gemini، پرداخت، ایمیل و پیامک.",
+                    Category = "پیکربندی",
+                    Status = OperationsChecklistStatus.Pending,
+                    CreatedAt = checklistCreatedAt,
+                    UpdatedAt = checklistCreatedAt
+                },
+                new OperationsChecklistItemEntity
+                {
+                    Id = Guid.Parse("F89AAB1B-9C36-49AA-82E4-6AC3E4F6D3A2"),
+                    Key = "storage-hardening",
+                    Title = "پیکربندی فضای ذخیره‌سازی",
+                    Description = "تنظیم سطح دسترسی فایل‌ها و مسیر ذخیره‌سازی مدارک ثبت‌نام.",
+                    Category = "پیکربندی",
+                    Status = OperationsChecklistStatus.Pending,
+                    CreatedAt = checklistCreatedAt,
+                    UpdatedAt = checklistCreatedAt
+                },
+                new OperationsChecklistItemEntity
+                {
+                    Id = Guid.Parse("0A1BBC2C-7E48-4DE9-B4AF-DBA6450B6FAE"),
+                    Key = "privacy-policy",
+                    Title = "انتشار سیاست حریم خصوصی",
+                    Description = "تهیه و انتشار سند حریم خصوصی مرتبط با داده‌های ثبت‌نام.",
+                    Category = "انطباق",
+                    Status = OperationsChecklistStatus.Pending,
+                    CreatedAt = checklistCreatedAt,
+                    UpdatedAt = checklistCreatedAt
                 }
             });
 

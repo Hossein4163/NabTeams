@@ -636,6 +636,61 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.ToTable("IntegrationSettings");
             });
 
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.OperationsChecklistItemEntity", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid");
+
+                b.Property<string>("ArtifactUrl")
+                    .HasMaxLength(512)
+                    .HasColumnType("character varying(512)");
+
+                b.Property<string>("Category")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<DateTimeOffset?>("CompletedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("Description")
+                    .IsRequired()
+                    .HasMaxLength(1024)
+                    .HasColumnType("character varying(1024)");
+
+                b.Property<string>("Key")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<string>("Notes")
+                    .HasMaxLength(1024)
+                    .HasColumnType("character varying(1024)");
+
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasColumnType("text");
+
+                b.Property<string>("Title")
+                    .IsRequired()
+                    .HasMaxLength(256)
+                    .HasColumnType("character varying(256)");
+
+                b.Property<DateTimeOffset>("UpdatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.HasKey("Id");
+
+                b.HasIndex("Key")
+                    .IsUnique();
+
+                b.ToTable("OperationsChecklistItems");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", b =>
             {
                 b.Property<Guid>("Id")

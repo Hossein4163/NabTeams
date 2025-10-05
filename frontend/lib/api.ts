@@ -20,6 +20,7 @@ export type NotificationChannel = 'Email' | 'Sms';
 export type BusinessPlanReviewStatus = 'Pending' | 'Completed' | 'Failed';
 
 export type IntegrationProviderType = 'Gemini' | 'PaymentGateway' | 'Sms' | 'Email';
+export type OperationsChecklistStatus = 'Pending' | 'InProgress' | 'Completed';
 
 export interface SessionUserInfo {
   id?: string | null;
@@ -452,6 +453,42 @@ export async function deleteIntegrationSetting(id: string, auth?: AuthContext): 
   await apiFetch<void>(`/api/admin/integrations/${id}`, {
     method: 'DELETE',
     ...auth
+  });
+}
+
+export interface OperationsChecklistItem {
+  id: string;
+  key: string;
+  title: string;
+  description: string;
+  category: string;
+  status: OperationsChecklistStatus;
+  completedAt?: string | null;
+  notes?: string | null;
+  artifactUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OperationsChecklistUpdatePayload {
+  status: OperationsChecklistStatus;
+  notes?: string;
+  artifactUrl?: string;
+}
+
+export async function listOperationsChecklist(auth?: AuthContext): Promise<OperationsChecklistItem[]> {
+  return apiFetch<OperationsChecklistItem[]>(`/api/admin/operations-checklist`, auth);
+}
+
+export async function updateOperationsChecklistItem(
+  id: string,
+  payload: OperationsChecklistUpdatePayload,
+  auth?: AuthContext
+): Promise<OperationsChecklistItem> {
+  return apiFetch<OperationsChecklistItem>(`/api/admin/operations-checklist/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    ...(auth ?? {})
   });
 }
 
