@@ -149,7 +149,14 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                     .HasMaxLength(32)
                     .HasColumnType("character varying(32)");
 
+                b.Property<RegistrationStatus>("Status")
+                    .HasColumnType("text")
+                    .HasConversion<string>();
+
                 b.Property<DateTimeOffset>("SubmittedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<DateTimeOffset?>("FinalizedAt")
                     .HasColumnType("timestamp with time zone");
 
                 b.HasKey("Id");
@@ -204,7 +211,14 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                     .HasMaxLength(32)
                     .HasColumnType("character varying(32)");
 
+                b.Property<RegistrationStatus>("Status")
+                    .HasColumnType("text")
+                    .HasConversion<string>();
+
                 b.Property<DateTimeOffset>("SubmittedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<DateTimeOffset?>("FinalizedAt")
                     .HasColumnType("timestamp with time zone");
 
                 b.HasKey("Id");
@@ -365,6 +379,9 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                     .HasMaxLength(128)
                     .HasColumnType("character varying(128)");
 
+                b.Property<DateTimeOffset?>("FinalizedAt")
+                    .HasColumnType("timestamp with time zone");
+
                 b.Property<string>("HeadFirstName")
                     .IsRequired()
                     .HasMaxLength(100)
@@ -388,8 +405,16 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                     .HasMaxLength(32)
                     .HasColumnType("character varying(32)");
 
+                b.Property<RegistrationStatus>("Status")
+                    .HasColumnType("text")
+                    .HasConversion<string>();
+
                 b.Property<DateTimeOffset>("SubmittedAt")
                     .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("SummaryFileUrl")
+                    .HasMaxLength(512)
+                    .HasColumnType("character varying(512)");
 
                 b.Property<string>("TeamName")
                     .IsRequired()

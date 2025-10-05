@@ -30,6 +30,12 @@ public record ParticipantRegistration
         = Array.Empty<RegistrationLink>();
     public string? AdditionalNotes { get; init; }
         = null;
+    public RegistrationStatus Status { get; init; }
+        = RegistrationStatus.Submitted;
+    public DateTimeOffset? FinalizedAt { get; init; }
+        = null;
+    public string? SummaryFileUrl { get; init; }
+        = null;
     public DateTimeOffset SubmittedAt { get; init; }
         = DateTimeOffset.UtcNow;
 }
@@ -75,6 +81,10 @@ public record JudgeRegistration
     public string HighestDegree { get; init; } = string.Empty;
     public string? Biography { get; init; }
         = null;
+    public RegistrationStatus Status { get; init; }
+        = RegistrationStatus.Submitted;
+    public DateTimeOffset? FinalizedAt { get; init; }
+        = null;
     public DateTimeOffset SubmittedAt { get; init; }
         = DateTimeOffset.UtcNow;
 }
@@ -91,6 +101,10 @@ public record InvestorRegistration
     public IReadOnlyCollection<string> InterestAreas { get; init; }
         = Array.Empty<string>();
     public string? AdditionalNotes { get; init; }
+        = null;
+    public RegistrationStatus Status { get; init; }
+        = RegistrationStatus.Submitted;
+    public DateTimeOffset? FinalizedAt { get; init; }
         = null;
     public DateTimeOffset SubmittedAt { get; init; }
         = DateTimeOffset.UtcNow;

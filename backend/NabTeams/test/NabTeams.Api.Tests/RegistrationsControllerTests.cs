@@ -15,9 +15,12 @@ namespace NabTeams.Api.Tests;
 
 public class RegistrationsControllerTests
 {
-    private static RegistrationsController CreateController(Mock<IRegistrationRepository> repository)
+    private static RegistrationsController CreateController(
+        Mock<IRegistrationRepository> repository,
+        Mock<IRegistrationDocumentStorage>? storage = null)
     {
-        return new RegistrationsController(repository.Object);
+        storage ??= new Mock<IRegistrationDocumentStorage>();
+        return new RegistrationsController(repository.Object, storage.Object);
     }
 
     [Fact]
@@ -154,5 +157,41 @@ public class RegistrationsControllerTests
         var result = await controller.GetParticipantAsync(Guid.NewGuid(), CancellationToken.None);
 
         Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task FinalizeParticipantAsync_ReturnsOk_WhenRepositoryUpdatesStatus()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        var registrationId = Guid.NewGuid();
+        var finalized = new ParticipantRegistration
+        {
+            Id = registrationId,
+            HeadFirstName = "Arman",
+            HeadLastName = "Nazari",
+            NationalId = "1234567890",
+            PhoneNumber = "09120000000",
+            EducationDegree = "Bachelor",
+            FieldOfStudy = "Computer Science",
+            TeamName = "AI Builders",
+            HasTeam = true,
+            TeamCompleted = true,
+            Status = RegistrationStatus.Finalized,
+            FinalizedAt = DateTimeOffset.UtcNow,
+            SubmittedAt = DateTimeOffset.UtcNow.AddDays(-2)
+        };
+
+        repository
+            .Setup(r => r.FinalizeParticipantAsync(registrationId, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(finalized);
+
+        var controller = CreateController(repository);
+
+        var result = await controller.FinalizeParticipantAsync(registrationId, null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<RegistrationsController.ParticipantRegistrationResponse>(ok.Value);
+        Assert.Equal(RegistrationStatus.Finalized, payload.Status);
+        repository.Verify(r => r.FinalizeParticipantAsync(registrationId, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

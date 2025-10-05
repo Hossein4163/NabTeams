@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Common;
@@ -18,12 +19,15 @@ public class RegistrationsController : ControllerBase
     private const int MaxDocuments = 10;
     private const int MaxLinks = 10;
     private const int MaxInterestAreas = 12;
+    private const long MaxUploadBytes = 25 * 1024 * 1024;
 
     private readonly IRegistrationRepository _repository;
+    private readonly IRegistrationDocumentStorage _documentStorage;
 
-    public RegistrationsController(IRegistrationRepository repository)
+    public RegistrationsController(IRegistrationRepository repository, IRegistrationDocumentStorage documentStorage)
     {
         _repository = repository;
+        _documentStorage = documentStorage;
     }
 
     [HttpPost("participants")]
@@ -35,22 +39,7 @@ public class RegistrationsController : ControllerBase
         [FromBody] ParticipantRegistrationRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.Members.Count > MaxMembers)
-        {
-            ModelState.AddModelError(nameof(request.Members), $"حداکثر {MaxMembers} عضو تیم قابل ثبت است.");
-        }
-
-        if (request.Documents.Count > MaxDocuments)
-        {
-            ModelState.AddModelError(nameof(request.Documents), $"حداکثر {MaxDocuments} فایل می‌تواند بارگذاری شود.");
-        }
-
-        if (request.Links.Count > MaxLinks)
-        {
-            ModelState.AddModelError(nameof(request.Links), $"حداکثر {MaxLinks} لینک مجاز است.");
-        }
-
-        if (!ModelState.IsValid)
+        if (!ValidateParticipantRequest(request))
         {
             return ValidationProblem(ModelState);
         }
@@ -60,6 +49,41 @@ public class RegistrationsController : ControllerBase
         var response = ParticipantRegistrationResponse.FromDomain(stored);
 
         return CreatedAtAction(nameof(GetParticipantAsync), new { id = response.Id }, response);
+    }
+
+    [HttpPost("participants/uploads")]
+    [AllowAnonymous]
+    [RequestSizeLimit(MaxUploadBytes)]
+    [SwaggerOperation(Summary = "آپلود فایل ثبت‌نام شرکت‌کننده", Description = "یک فایل را برای پیوست به ثبت‌نام شرکت‌کننده ذخیره می‌کند و آدرس قابل‌دسترسی آن را برمی‌گرداند.")]
+    [ProducesResponseType(typeof(ParticipantDocumentUploadResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ParticipantDocumentUploadResponse>> UploadParticipantDocumentAsync(
+        [FromForm] ParticipantDocumentUploadRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File is null || request.File.Length == 0)
+        {
+            ModelState.AddModelError(nameof(request.File), "فایلی برای آپلود ارسال نشده است.");
+            return ValidationProblem(ModelState);
+        }
+
+        if (request.File.Length > MaxUploadBytes)
+        {
+            ModelState.AddModelError(nameof(request.File), "حجم فایل انتخاب‌شده بیش از حد مجاز است (۲۵ مگابایت).");
+            return ValidationProblem(ModelState);
+        }
+
+        await using var stream = request.File.OpenReadStream();
+        var stored = await _documentStorage.SaveAsync(request.File.FileName, stream, cancellationToken);
+
+        var response = new ParticipantDocumentUploadResponse
+        {
+            Category = request.Category,
+            FileName = stored.FileName,
+            FileUrl = stored.FileUrl
+        };
+
+        return Created(stored.FileUrl, response);
     }
 
     [HttpGet("participants")]
@@ -90,6 +114,79 @@ public class RegistrationsController : ControllerBase
         }
 
         return Ok(ParticipantRegistrationResponse.FromDomain(registration));
+    }
+
+    [HttpGet("participants/{id:guid}/public")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "دریافت عمومی ثبت‌نام شرکت‌کننده", Description = "جزئیات یک ثبت‌نام شرکت‌کننده را بدون نیاز به احراز هویت برمی‌گرداند تا متقاضی بتواند آن را بازبینی کند.")]
+    [ProducesResponseType(typeof(ParticipantRegistrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ParticipantRegistrationResponse>> GetParticipantPublicAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var registration = await _repository.GetParticipantAsync(id, cancellationToken);
+        if (registration is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(ParticipantRegistrationResponse.FromDomain(registration));
+    }
+
+    [HttpPut("participants/{id:guid}")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "ویرایش ثبت‌نام شرکت‌کننده", Description = "اطلاعات ارسال‌شده توسط شرکت‌کننده را پیش از تأیید نهایی به‌روزرسانی می‌کند.")]
+    [ProducesResponseType(typeof(ParticipantRegistrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ParticipantRegistrationResponse>> UpdateParticipantAsync(
+        Guid id,
+        [FromBody] ParticipantRegistrationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ValidateParticipantRequest(request))
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        var existing = await _repository.GetParticipantAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
+        if (existing.Status == RegistrationStatus.Finalized)
+        {
+            return Conflict(new { message = "این ثبت‌نام قبلاً نهایی شده است و قابل ویرایش نیست." });
+        }
+
+        var updatedModel = request.ToDomain(id, existing);
+        var stored = await _repository.UpdateParticipantAsync(id, updatedModel, cancellationToken);
+        if (stored is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(ParticipantRegistrationResponse.FromDomain(stored));
+    }
+
+    [HttpPost("participants/{id:guid}/finalize")]
+    [AllowAnonymous]
+    [SwaggerOperation(Summary = "تأیید نهایی ثبت‌نام شرکت‌کننده", Description = "پس از بازبینی اطلاعات، وضعیت ثبت‌نام شرکت‌کننده را به حالت نهایی تغییر می‌دهد.")]
+    [ProducesResponseType(typeof(ParticipantRegistrationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ParticipantRegistrationResponse>> FinalizeParticipantAsync(
+        Guid id,
+        [FromBody] ParticipantFinalizeRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var stored = await _repository.FinalizeParticipantAsync(id, request?.SummaryFileUrl, cancellationToken);
+        if (stored is null)
+        {
+            return NotFound();
+        }
+
+        return Ok(ParticipantRegistrationResponse.FromDomain(stored));
     }
 
     [HttpPost("judges")]
@@ -193,6 +290,26 @@ public class RegistrationsController : ControllerBase
         return Ok(InvestorRegistrationResponse.FromDomain(registration));
     }
 
+    private bool ValidateParticipantRequest(ParticipantRegistrationRequest request)
+    {
+        if (request.Members.Count > MaxMembers)
+        {
+            ModelState.AddModelError(nameof(request.Members), $"حداکثر {MaxMembers} عضو تیم قابل ثبت است.");
+        }
+
+        if (request.Documents.Count > MaxDocuments)
+        {
+            ModelState.AddModelError(nameof(request.Documents), $"حداکثر {MaxDocuments} فایل می‌تواند بارگذاری شود.");
+        }
+
+        if (request.Links.Count > MaxLinks)
+        {
+            ModelState.AddModelError(nameof(request.Links), $"حداکثر {MaxLinks} لینک مجاز است.");
+        }
+
+        return ModelState.IsValid;
+    }
+
     private static string? FormatDate(DateOnly? date)
         => date?.ToString("yyyy-MM-dd");
 
@@ -250,11 +367,13 @@ public class RegistrationsController : ControllerBase
 
         public List<ParticipantLinkRequest> Links { get; init; } = new();
 
-        public ParticipantRegistration ToDomain()
+        public ParticipantRegistration ToDomain(Guid? id = null, ParticipantRegistration? existing = null)
         {
+            var normalizedId = id ?? existing?.Id ?? Guid.NewGuid();
+            var status = existing?.Status ?? RegistrationStatus.Submitted;
             return new ParticipantRegistration
             {
-                Id = Guid.NewGuid(),
+                Id = normalizedId,
                 HeadFirstName = HeadFirstName.Trim(),
                 HeadLastName = HeadLastName.Trim(),
                 NationalId = NationalId.Trim(),
@@ -276,7 +395,10 @@ public class RegistrationsController : ControllerBase
                 Links = Links
                     .Select(link => link.ToDomain())
                     .ToList(),
-                SubmittedAt = DateTimeOffset.UtcNow
+                Status = status,
+                FinalizedAt = existing?.FinalizedAt,
+                SummaryFileUrl = existing?.SummaryFileUrl,
+                SubmittedAt = existing?.SubmittedAt ?? DateTimeOffset.UtcNow
             };
         }
     }
@@ -325,6 +447,22 @@ public class RegistrationsController : ControllerBase
                 FileName = FileName.Trim(),
                 FileUrl = FileUrl.Trim()
             };
+    }
+
+    public record ParticipantDocumentUploadRequest
+    {
+        public RegistrationDocumentCategory Category { get; init; } = RegistrationDocumentCategory.ProjectArchive;
+
+        [Required]
+        public IFormFile? File { get; init; }
+            = null;
+    }
+
+    public record ParticipantDocumentUploadResponse
+    {
+        public RegistrationDocumentCategory Category { get; init; } = RegistrationDocumentCategory.ProjectArchive;
+        public string FileName { get; init; } = string.Empty;
+        public string FileUrl { get; init; } = string.Empty;
     }
 
     public record ParticipantLinkRequest
@@ -454,6 +592,13 @@ public class RegistrationsController : ControllerBase
             };
     }
 
+    public record ParticipantFinalizeRequest
+    {
+        [MaxLength(512)]
+        public string? SummaryFileUrl { get; init; }
+            = null;
+    }
+
     public record ParticipantRegistrationSummaryResponse
     {
         public Guid Id { get; init; }
@@ -461,6 +606,10 @@ public class RegistrationsController : ControllerBase
         public string TeamName { get; init; } = string.Empty;
         public bool TeamCompleted { get; init; }
             = false;
+        public RegistrationStatus Status { get; init; }
+            = RegistrationStatus.Submitted;
+        public DateTimeOffset? FinalizedAt { get; init; }
+            = null;
         public DateTimeOffset SubmittedAt { get; init; }
             = DateTimeOffset.UtcNow;
 
@@ -471,6 +620,8 @@ public class RegistrationsController : ControllerBase
                 HeadFullName = $"{registration.HeadFirstName} {registration.HeadLastName}".Trim(),
                 TeamName = registration.TeamName,
                 TeamCompleted = registration.TeamCompleted,
+                Status = registration.Status,
+                FinalizedAt = registration.FinalizedAt,
                 SubmittedAt = registration.SubmittedAt
             };
     }
@@ -494,6 +645,12 @@ public class RegistrationsController : ControllerBase
         public bool TeamCompleted { get; init; }
             = false;
         public string? AdditionalNotes { get; init; }
+            = null;
+        public RegistrationStatus Status { get; init; }
+            = RegistrationStatus.Submitted;
+        public DateTimeOffset? FinalizedAt { get; init; }
+            = null;
+        public string? SummaryFileUrl { get; init; }
             = null;
         public DateTimeOffset SubmittedAt { get; init; }
             = DateTimeOffset.UtcNow;
@@ -520,6 +677,9 @@ public class RegistrationsController : ControllerBase
                 HasTeam = registration.HasTeam,
                 TeamCompleted = registration.TeamCompleted,
                 AdditionalNotes = registration.AdditionalNotes,
+                Status = registration.Status,
+                FinalizedAt = registration.FinalizedAt,
+                SummaryFileUrl = registration.SummaryFileUrl,
                 SubmittedAt = registration.SubmittedAt,
                 Members = registration.Members
                     .Select(ParticipantTeamMemberResponse.FromDomain)
@@ -601,6 +761,10 @@ public class RegistrationsController : ControllerBase
         public string HighestDegree { get; init; } = string.Empty;
         public string? Biography { get; init; }
             = null;
+        public RegistrationStatus Status { get; init; }
+            = RegistrationStatus.Submitted;
+        public DateTimeOffset? FinalizedAt { get; init; }
+            = null;
         public DateTimeOffset SubmittedAt { get; init; }
             = DateTimeOffset.UtcNow;
 
@@ -617,6 +781,8 @@ public class RegistrationsController : ControllerBase
                 FieldOfExpertise = registration.FieldOfExpertise,
                 HighestDegree = registration.HighestDegree,
                 Biography = registration.Biography,
+                Status = registration.Status,
+                FinalizedAt = registration.FinalizedAt,
                 SubmittedAt = registration.SubmittedAt
             };
     }
@@ -634,6 +800,10 @@ public class RegistrationsController : ControllerBase
             = Array.Empty<string>();
         public string? AdditionalNotes { get; init; }
             = null;
+        public RegistrationStatus Status { get; init; }
+            = RegistrationStatus.Submitted;
+        public DateTimeOffset? FinalizedAt { get; init; }
+            = null;
         public DateTimeOffset SubmittedAt { get; init; }
             = DateTimeOffset.UtcNow;
 
@@ -648,6 +818,8 @@ public class RegistrationsController : ControllerBase
                 Email = registration.Email,
                 InterestAreas = registration.InterestAreas.ToList(),
                 AdditionalNotes = registration.AdditionalNotes,
+                Status = registration.Status,
+                FinalizedAt = registration.FinalizedAt,
                 SubmittedAt = registration.SubmittedAt
             };
     }

@@ -17,3 +17,10 @@ public enum RegistrationLinkType
     Demo,
     Other
 }
+
+public enum RegistrationStatus
+{
+    Submitted,
+    Finalized,
+    Cancelled
+}

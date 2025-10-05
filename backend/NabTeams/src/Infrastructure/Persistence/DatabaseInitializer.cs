@@ -148,6 +148,7 @@ public static class DatabaseInitializer
                 FieldOfExpertise = "سرمایه‌گذاری خطرپذیر",
                 HighestDegree = "دکتری مدیریت کسب‌وکار",
                 Biography = "۱۵ سال سابقهٔ مشاورهٔ استارتاپ و داوری رویدادهای کارآفرینی.",
+                Status = RegistrationStatus.Submitted,
                 SubmittedAt = DateTimeOffset.UtcNow.AddDays(-1)
             });
 
@@ -166,6 +167,7 @@ public static class DatabaseInitializer
                 Email = "leila.hosseini@example.com",
                 InterestAreas = new List<string> { "AgriTech", "AI", "Robotics" },
                 AdditionalNotes = "به دنبال تیم‌هایی با مدل درآمدی مشخص و مشتریان پایلوت هستم.",
+                Status = RegistrationStatus.Submitted,
                 SubmittedAt = DateTimeOffset.UtcNow.AddDays(-3)
             });
 

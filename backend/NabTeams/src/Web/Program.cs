@@ -131,6 +131,7 @@ builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
 builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
 builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
+builder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
 builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();
@@ -193,6 +194,8 @@ if (!app.Environment.IsDevelopment())
 app.UseResponseCompression();
 app.UseSecurityHeaders();
 app.UseStaticFiles(registrationDocumentStaticFiles);
+
+app.UseStaticFiles();
 
 app.UseRouting();
 app.UseCors("frontend");

@@ -156,6 +156,9 @@ public static class EntityMappingExtensions
             HasTeam = entity.HasTeam,
             TeamCompleted = entity.TeamCompleted,
             AdditionalNotes = entity.AdditionalNotes,
+            Status = entity.Status,
+            FinalizedAt = entity.FinalizedAt,
+            SummaryFileUrl = entity.SummaryFileUrl,
             SubmittedAt = entity.SubmittedAt,
             Members = (entity.Members ?? new List<TeamMemberEntity>())
                 .OrderBy(m => m.FullName)
@@ -204,6 +207,9 @@ public static class EntityMappingExtensions
             HasTeam = model.HasTeam,
             TeamCompleted = model.TeamCompleted,
             AdditionalNotes = model.AdditionalNotes,
+            Status = model.Status,
+            FinalizedAt = model.FinalizedAt,
+            SummaryFileUrl = model.SummaryFileUrl,
             SubmittedAt = model.SubmittedAt
         };
 
@@ -248,7 +254,7 @@ public static class EntityMappingExtensions
     }
 
     public static JudgeRegistration ToModel(this JudgeRegistrationEntity entity)
-        => new()
+            => new()
         {
             Id = entity.Id,
             FirstName = entity.FirstName,
@@ -260,6 +266,8 @@ public static class EntityMappingExtensions
             FieldOfExpertise = entity.FieldOfExpertise,
             HighestDegree = entity.HighestDegree,
             Biography = entity.Biography,
+            Status = entity.Status,
+            FinalizedAt = entity.FinalizedAt,
             SubmittedAt = entity.SubmittedAt
         };
 
@@ -276,6 +284,8 @@ public static class EntityMappingExtensions
             FieldOfExpertise = model.FieldOfExpertise,
             HighestDegree = model.HighestDegree,
             Biography = model.Biography,
+            Status = model.Status,
+            FinalizedAt = model.FinalizedAt,
             SubmittedAt = model.SubmittedAt
         };
 
@@ -290,6 +300,8 @@ public static class EntityMappingExtensions
             Email = entity.Email,
             InterestAreas = entity.InterestAreas.ToList(),
             AdditionalNotes = entity.AdditionalNotes,
+            Status = entity.Status,
+            FinalizedAt = entity.FinalizedAt,
             SubmittedAt = entity.SubmittedAt
         };
 
@@ -304,6 +316,8 @@ public static class EntityMappingExtensions
             Email = model.Email,
             InterestAreas = model.InterestAreas.ToList(),
             AdditionalNotes = model.AdditionalNotes,
+            Status = model.Status,
+            FinalizedAt = model.FinalizedAt,
             SubmittedAt = model.SubmittedAt
         };
 }

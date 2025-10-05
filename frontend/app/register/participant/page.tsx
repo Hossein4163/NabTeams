@@ -9,7 +9,11 @@ import {
   ParticipantTeamMemberInput,
   RegistrationDocumentCategory,
   RegistrationLinkType,
-  submitParticipantRegistration
+  RegistrationStatus,
+  finalizeParticipantRegistration,
+  submitParticipantRegistration,
+  updateParticipantRegistration,
+  uploadParticipantDocument
 } from '../../../lib/api';
 
 const stepLabels = [
@@ -58,9 +62,14 @@ const linkTypeOptions: Array<{ value: RegistrationLinkType; label: string }> = [
   { value: 'Other', label: 'سایر' }
 ];
 
-function cleanupObjectUrl(url: string) {
-  if (typeof url === 'string' && url.startsWith('blob:')) {
-    URL.revokeObjectURL(url);
+function formatStatus(status: RegistrationStatus) {
+  switch (status) {
+    case 'Finalized':
+      return 'تأیید نهایی شد';
+    case 'Cancelled':
+      return 'لغو شده';
+    default:
+      return 'در انتظار تأیید نهایی';
   }
 }
 
@@ -90,12 +99,52 @@ function createInitialState(): ParticipantFormState {
   };
 }
 
+function createStateFromResponse(response: ParticipantRegistrationResponse): ParticipantFormState {
+  return {
+    headFirstName: response.headFirstName,
+    headLastName: response.headLastName,
+    nationalId: response.nationalId,
+    phoneNumber: response.phoneNumber,
+    email: response.email ?? '',
+    birthDate: response.birthDate ?? '',
+    educationDegree: response.educationDegree,
+    fieldOfStudy: response.fieldOfStudy,
+    teamName: response.teamName,
+    hasTeam: response.hasTeam,
+    teamCompleted: response.teamCompleted,
+    additionalNotes: response.additionalNotes ?? '',
+    members: response.members.map((member) => ({
+      fullName: member.fullName,
+      role: member.role,
+      focusArea: member.focusArea
+    })),
+    documents: response.documents.map((document) => ({
+      category: document.category,
+      fileName: document.fileName,
+      fileUrl: document.fileUrl
+    })),
+    links: response.links.map((link) => ({
+      type: link.type,
+      label: link.label,
+      url: link.url
+    }))
+  };
+}
+
 export default function ParticipantRegistrationPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<ParticipantFormState>(() => createInitialState());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ParticipantRegistrationResponse | null>(null);
+  const [registrationId, setRegistrationId] = useState<string | null>(null);
+  const [finalizing, setFinalizing] = useState(false);
+  const [uploadingDocuments, setUploadingDocuments] = useState<Record<number, boolean>>({});
+
+  const hasPendingUploads = useMemo(
+    () => Object.values(uploadingDocuments).some(Boolean),
+    [uploadingDocuments]
+  );
 
   const filteredMembers = useMemo(() => {
     if (!form.hasTeam) {
@@ -165,15 +214,17 @@ export default function ParticipantRegistrationPage() {
   }
 
   function removeDocument(index: number) {
-    setForm((prev) => {
-      const target = prev.documents[index];
-      if (target?.fileUrl) {
-        cleanupObjectUrl(target.fileUrl);
+    setForm((prev) => ({
+      ...prev,
+      documents: prev.documents.filter((_, idx) => idx !== index)
+    }));
+    setUploadingDocuments((prev) => {
+      if (!(index in prev)) {
+        return prev;
       }
-      return {
-        ...prev,
-        documents: prev.documents.filter((_, idx) => idx !== index)
-      };
+      const next = { ...prev };
+      delete next[index];
+      return next;
     });
   }
 
@@ -181,19 +232,38 @@ export default function ParticipantRegistrationPage() {
     if (!file) {
       return;
     }
-    setForm((prev) => {
-      const target = prev.documents[index];
-      if (!target) {
-        return prev;
-      }
-      if (target.fileUrl) {
-        cleanupObjectUrl(target.fileUrl);
-      }
-      const nextDocuments = prev.documents.map((doc, idx) =>
-        idx === index ? { ...doc, fileName: file.name, fileUrl: URL.createObjectURL(file) } : doc
-      );
-      return { ...prev, documents: nextDocuments };
-    });
+
+    setUploadingDocuments((prev) => ({ ...prev, [index]: true }));
+
+    uploadParticipantDocument(file, form.documents[index]?.category ?? 'ProjectArchive')
+      .then((uploaded) => {
+        setForm((prev) => {
+          const nextDocuments = prev.documents.map((doc, idx) =>
+            idx === index
+              ? {
+                  ...doc,
+                  fileName: file.name,
+                  fileUrl: uploaded.fileUrl
+                }
+              : doc
+          );
+          return { ...prev, documents: nextDocuments };
+        });
+      })
+      .catch((err) => {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError('بارگذاری فایل با خطا مواجه شد.');
+        }
+      })
+      .finally(() => {
+        setUploadingDocuments((prev) => {
+          const next = { ...prev };
+          delete next[index];
+          return next;
+        });
+      });
   }
 
   function updateLink(index: number, key: keyof LinkDraft, value: string) {
@@ -292,6 +362,11 @@ export default function ParticipantRegistrationPage() {
       return;
     }
 
+    if (hasPendingUploads) {
+      setError('لطفاً تا پایان بارگذاری فایل‌ها صبر کنید.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -328,7 +403,10 @@ export default function ParticipantRegistrationPage() {
     };
 
     try {
-      const response = await submitParticipantRegistration(payload);
+      const response = registrationId
+        ? await updateParticipantRegistration(registrationId, payload)
+        : await submitParticipantRegistration(payload);
+      setRegistrationId(response.id);
       setResult(response);
     } catch (err) {
       if (err instanceof Error) {
@@ -342,21 +420,30 @@ export default function ParticipantRegistrationPage() {
   }
 
   function handleReset() {
-    form.documents.forEach((doc) => cleanupObjectUrl(doc.fileUrl));
     setForm(createInitialState());
     setResult(null);
     setError(null);
     setStep(0);
+    setRegistrationId(null);
+    setUploadingDocuments({});
+    setFinalizing(false);
   }
 
   if (result) {
+    const isFinalized = result.status === 'Finalized';
     return (
       <div className="space-y-6">
         <div className="rounded-xl border border-emerald-600/50 bg-emerald-500/10 p-6">
           <h2 className="text-2xl font-semibold text-emerald-300">ثبت‌نام با موفقیت انجام شد</h2>
           <p className="mt-3 text-sm text-emerald-100/90">
-            کد پیگیری شما <span className="font-mono">{result.id}</span> است. در صورت نیاز به ویرایش، به بخش مدیریت تیم مراجعه کنید.
+            کد پیگیری شما <span className="font-mono">{result.id}</span> است. می‌توانید اطلاعات را در همین صفحه ویرایش یا تأیید نهایی کنید.
           </p>
+          <p className="mt-2 text-sm text-emerald-200/80">وضعیت فعلی: {formatStatus(result.status)}</p>
+          {result.finalizedAt && (
+            <p className="text-xs text-emerald-200/70">
+              تاریخ تأیید نهایی: {new Date(result.finalizedAt).toLocaleString('fa-IR')}
+            </p>
+          )}
         </div>
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/40 p-6">
           <h3 className="text-lg font-semibold">خلاصه اطلاعات ارسال‌شده</h3>
@@ -401,7 +488,15 @@ export default function ParticipantRegistrationPage() {
               <ul className="mt-2 space-y-2 text-sm text-emerald-200">
                 {result.documents.map((doc) => (
                   <li key={doc.id} className="truncate">
-                    <span className="text-slate-400">[{doc.category}]</span> {doc.fileName}
+                    <span className="text-slate-400">[{doc.category}]</span>{' '}
+                    <a
+                      href={doc.fileUrl}
+                      className="underline-offset-2 hover:underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {doc.fileName}
+                    </a>
                   </li>
                 ))}
               </ul>
@@ -420,13 +515,57 @@ export default function ParticipantRegistrationPage() {
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
-        >
-          ثبت‌نام جدید
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setForm(createStateFromResponse(result));
+              setResult(null);
+              setError(null);
+              setStep(0);
+              setUploadingDocuments({});
+            }}
+            disabled={isFinalized}
+            className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-500"
+          >
+            ویرایش اطلاعات
+          </button>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
+          >
+            ثبت‌نام جدید
+          </button>
+          {!isFinalized && (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!registrationId) {
+                  return;
+                }
+                setFinalizing(true);
+                setError(null);
+                try {
+                  const response = await finalizeParticipantRegistration(registrationId);
+                  setResult(response);
+                } catch (err) {
+                  if (err instanceof Error) {
+                    setError(err.message);
+                  } else {
+                    setError('تأیید نهایی با خطا مواجه شد.');
+                  }
+                } finally {
+                  setFinalizing(false);
+                }
+              }}
+              disabled={finalizing}
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-900/50 disabled:text-emerald-100/40"
+            >
+              {finalizing ? 'در حال تأیید...' : 'تأیید نهایی'}
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -637,17 +776,35 @@ export default function ParticipantRegistrationPage() {
                         className="mt-1 w-full text-xs text-slate-200"
                         onChange={(event) => handleDocumentFile(index, event.target.files?.[0] ?? null)}
                       />
-                      <p className="mt-1 text-xs text-slate-500">در محیط آزمایشی، فایل به صورت محلی ثبت می‌شود.</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {uploadingDocuments[index]
+                          ? 'در حال بارگذاری فایل روی سرور...'
+                          : document.fileUrl
+                          ? 'فایل با موفقیت ذخیره شد. در صورت نیاز می‌توانید آدرس را در بخش زیر ویرایش کنید.'
+                          : 'پس از انتخاب فایل، لینک دانلود به صورت خودکار تکمیل می‌شود.'}
+                      </p>
+                      {document.fileUrl && (
+                        <a
+                          href={document.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-emerald-300 underline-offset-2 hover:underline"
+                        >
+                          مشاهده فایل آپلود شده
+                        </a>
+                      )}
                     </div>
                     <TextField
                       label="نام فایل"
                       value={document.fileName}
                       onChange={(value) => updateDocument(index, 'fileName', value)}
+                      disabled={uploadingDocuments[index]}
                     />
                     <TextField
                       label="آدرس فایل یا لینک دانلود"
                       value={document.fileUrl}
                       onChange={(value) => updateDocument(index, 'fileUrl', value)}
+                      disabled={uploadingDocuments[index]}
                     />
                   </div>
                 </div>
@@ -816,7 +973,8 @@ function TextField({
   onChange,
   type = 'text',
   className = '',
-  required
+  required,
+  disabled
 }: {
   label: string;
   value: string;
@@ -824,6 +982,7 @@ function TextField({
   type?: string;
   className?: string;
   required?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <label className={`text-sm text-slate-300 ${className}`}>
@@ -833,7 +992,8 @@ function TextField({
         onChange={(event) => onChange(event.target.value)}
         type={type}
         required={required}
-        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        disabled={disabled}
+        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
       />
     </label>
   );

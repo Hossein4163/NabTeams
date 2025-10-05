@@ -33,6 +33,7 @@ public class ApplicationDbContext : DbContext
         var appealStatusConverter = new EnumToStringConverter<AppealStatus>();
         var documentCategoryConverter = new EnumToStringConverter<RegistrationDocumentCategory>();
         var linkTypeConverter = new EnumToStringConverter<RegistrationLinkType>();
+        var registrationStatusConverter = new EnumToStringConverter<RegistrationStatus>();
 
         var stringListComparer = new ValueComparer<List<string>>(
             (left, right) => (left ?? new()).SequenceEqual(right ?? new()),
@@ -124,6 +125,8 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.TeamName).HasMaxLength(128).IsRequired();
             entity.Property(e => e.AdditionalNotes).HasMaxLength(1024);
             entity.Property(e => e.SubmittedAt).IsRequired();
+            entity.Property(e => e.Status).HasConversion(registrationStatusConverter).IsRequired();
+            entity.Property(e => e.SummaryFileUrl).HasMaxLength(512);
 
             entity.HasMany(e => e.Members)
                 .WithOne(e => e.ParticipantRegistration)
@@ -177,6 +180,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.HighestDegree).HasMaxLength(128).IsRequired();
             entity.Property(e => e.Biography).HasMaxLength(1024);
             entity.Property(e => e.SubmittedAt).IsRequired();
+            entity.Property(e => e.Status).HasConversion(registrationStatusConverter).IsRequired();
         });
 
         modelBuilder.Entity<InvestorRegistrationEntity>(entity =>
@@ -196,6 +200,7 @@ public class ApplicationDbContext : DbContext
                 .Metadata.SetValueComparer(stringListComparer);
             entity.Property(e => e.AdditionalNotes).HasMaxLength(1024);
             entity.Property(e => e.SubmittedAt).IsRequired();
+            entity.Property(e => e.Status).HasConversion(registrationStatusConverter).IsRequired();
         });
     }
 }
@@ -290,6 +295,12 @@ public class ParticipantRegistrationEntity
         = false;
     public string? AdditionalNotes { get; set; }
         = null;
+    public RegistrationStatus Status { get; set; }
+        = RegistrationStatus.Submitted;
+    public DateTimeOffset? FinalizedAt { get; set; }
+        = null;
+    public string? SummaryFileUrl { get; set; }
+        = null;
     public DateTimeOffset SubmittedAt { get; set; }
         = DateTimeOffset.UtcNow;
     public List<TeamMemberEntity> Members { get; set; } = new();
@@ -347,6 +358,10 @@ public class JudgeRegistrationEntity
     public string HighestDegree { get; set; } = string.Empty;
     public string? Biography { get; set; }
         = null;
+    public RegistrationStatus Status { get; set; }
+        = RegistrationStatus.Submitted;
+    public DateTimeOffset? FinalizedAt { get; set; }
+        = null;
     public DateTimeOffset SubmittedAt { get; set; }
         = DateTimeOffset.UtcNow;
 }
@@ -362,6 +377,10 @@ public class InvestorRegistrationEntity
         = null;
     public List<string> InterestAreas { get; set; } = new();
     public string? AdditionalNotes { get; set; }
+        = null;
+    public RegistrationStatus Status { get; set; }
+        = RegistrationStatus.Submitted;
+    public DateTimeOffset? FinalizedAt { get; set; }
         = null;
     public DateTimeOffset SubmittedAt { get; set; }
         = DateTimeOffset.UtcNow;

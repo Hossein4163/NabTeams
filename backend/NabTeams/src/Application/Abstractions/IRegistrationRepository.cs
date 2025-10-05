@@ -7,6 +7,8 @@ public interface IRegistrationRepository
     Task<ParticipantRegistration> AddParticipantAsync(ParticipantRegistration registration, CancellationToken cancellationToken = default);
     Task<ParticipantRegistration?> GetParticipantAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<ParticipantRegistration>> ListParticipantsAsync(CancellationToken cancellationToken = default);
+    Task<ParticipantRegistration?> UpdateParticipantAsync(Guid id, ParticipantRegistration registration, CancellationToken cancellationToken = default);
+    Task<ParticipantRegistration?> FinalizeParticipantAsync(Guid id, string? summaryFileUrl, CancellationToken cancellationToken = default);
 
     Task<JudgeRegistration> AddJudgeAsync(JudgeRegistration registration, CancellationToken cancellationToken = default);
     Task<JudgeRegistration?> GetJudgeAsync(Guid id, CancellationToken cancellationToken = default);

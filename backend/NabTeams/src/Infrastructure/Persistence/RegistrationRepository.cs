@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NabTeams.Application.Abstractions;
 using NabTeams.Domain.Entities;
+using NabTeams.Domain.Enums;
 using System.Linq;
 
 namespace NabTeams.Infrastructure.Persistence;
@@ -41,11 +42,82 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Members)
             .Include(x => x.Documents)
             .Include(x => x.Links)
-            .OrderByDescending(x => x.SubmittedAt)
+            .OrderByDescending(x => x.FinalizedAt ?? x.SubmittedAt)
             .Take(200)
             .ToListAsync(cancellationToken);
 
         return entities.Select(x => x.ToModel()).ToList();
+    }
+
+    public async Task<ParticipantRegistration?> UpdateParticipantAsync(
+        Guid id,
+        ParticipantRegistration registration,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.ParticipantRegistrations
+            .Include(x => x.Members)
+            .Include(x => x.Documents)
+            .Include(x => x.Links)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        if (entity.Status == RegistrationStatus.Finalized)
+        {
+            return entity.ToModel();
+        }
+
+        entity.HeadFirstName = registration.HeadFirstName;
+        entity.HeadLastName = registration.HeadLastName;
+        entity.NationalId = registration.NationalId;
+        entity.PhoneNumber = registration.PhoneNumber;
+        entity.Email = registration.Email;
+        entity.BirthDate = registration.BirthDate;
+        entity.EducationDegree = registration.EducationDegree;
+        entity.FieldOfStudy = registration.FieldOfStudy;
+        entity.TeamName = registration.TeamName;
+        entity.HasTeam = registration.HasTeam;
+        entity.TeamCompleted = registration.TeamCompleted;
+        entity.AdditionalNotes = registration.AdditionalNotes;
+
+        entity.UpdateCollections(registration);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.ToModel();
+    }
+
+    public async Task<ParticipantRegistration?> FinalizeParticipantAsync(
+        Guid id,
+        string? summaryFileUrl,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.ParticipantRegistrations
+            .Include(x => x.Members)
+            .Include(x => x.Documents)
+            .Include(x => x.Links)
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (entity is null)
+        {
+            return null;
+        }
+
+        if (entity.Status == RegistrationStatus.Finalized)
+        {
+            return entity.ToModel();
+        }
+
+        entity.Status = RegistrationStatus.Finalized;
+        entity.FinalizedAt = DateTimeOffset.UtcNow;
+        entity.SummaryFileUrl = string.IsNullOrWhiteSpace(summaryFileUrl)
+            ? entity.SummaryFileUrl
+            : summaryFileUrl.Trim();
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return entity.ToModel();
     }
 
     public async Task<JudgeRegistration> AddJudgeAsync(JudgeRegistration registration, CancellationToken cancellationToken = default)

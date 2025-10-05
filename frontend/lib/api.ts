@@ -4,6 +4,8 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:500
 export const MAX_MESSAGE_LENGTH = 2000;
 export const MAX_SUPPORT_QUESTION_LENGTH = 1500;
 
+export type RegistrationStatus = 'Submitted' | 'Finalized' | 'Cancelled';
+
 export interface SessionUserInfo {
   id?: string | null;
   email?: string | null;
@@ -266,9 +268,20 @@ export interface ParticipantRegistrationResponse {
   id: string;
   headFirstName: string;
   headLastName: string;
+  nationalId: string;
+  phoneNumber: string;
+  email: string | null;
+  birthDate: string | null;
+  educationDegree: string;
+  fieldOfStudy: string;
   teamName: string;
+  hasTeam: boolean;
   submittedAt: string;
   teamCompleted: boolean;
+  additionalNotes: string | null;
+  status: RegistrationStatus;
+  finalizedAt: string | null;
+  summaryFileUrl: string | null;
   members: Array<ParticipantTeamMemberInput & { id: string }>;
   documents: Array<ParticipantDocumentInput & { id: string }>;
   links: Array<ParticipantLinkInput & { id: string; label: string }>;
@@ -283,6 +296,74 @@ export async function submitParticipantRegistration(
     ...auth,
     body: JSON.stringify(payload)
   });
+}
+
+export async function updateParticipantRegistration(
+  id: string,
+  payload: ParticipantRegistrationPayload,
+  auth?: AuthContext
+): Promise<ParticipantRegistrationResponse> {
+  return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants/${id}`, {
+    method: 'PUT',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function finalizeParticipantRegistration(
+  id: string,
+  summaryFileUrl?: string | null,
+  auth?: AuthContext
+): Promise<ParticipantRegistrationResponse> {
+  return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants/${id}/finalize`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify({ summaryFileUrl: summaryFileUrl ?? null })
+  });
+}
+
+export async function getParticipantRegistration(
+  id: string,
+  auth?: AuthContext
+): Promise<ParticipantRegistrationResponse> {
+  return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants/${id}/public`, {
+    method: 'GET',
+    ...auth
+  });
+}
+
+export interface ParticipantDocumentUploadResponse {
+  category: RegistrationDocumentCategory;
+  fileName: string;
+  fileUrl: string;
+}
+
+export async function uploadParticipantDocument(
+  file: File,
+  category: RegistrationDocumentCategory,
+  auth?: AuthContext
+): Promise<ParticipantDocumentUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('category', category);
+
+  const headers = new Headers();
+  applyAuthHeaders(headers, auth);
+  headers.delete('Content-Type');
+
+  const response = await fetch(`${API_BASE}/api/registrations/participants/uploads`, {
+    method: 'POST',
+    headers,
+    body: formData,
+    cache: 'no-store'
+  });
+
+  if (!response.ok) {
+    const body = await safeReadJson(response);
+    throw new Error((body as any)?.message ?? 'آپلود فایل ناموفق بود');
+  }
+
+  return (await response.json()) as ParticipantDocumentUploadResponse;
 }
 
 export interface JudgeRegistrationPayload {
@@ -302,6 +383,8 @@ export interface JudgeRegistrationResponse {
   firstName: string;
   lastName: string;
   submittedAt: string;
+  status: RegistrationStatus;
+  finalizedAt: string | null;
 }
 
 export async function submitJudgeRegistration(
@@ -331,6 +414,8 @@ export interface InvestorRegistrationResponse {
   lastName: string;
   submittedAt: string;
   interestAreas: string[];
+  status: RegistrationStatus;
+  finalizedAt: string | null;
 }
 
 export async function submitInvestorRegistration(
