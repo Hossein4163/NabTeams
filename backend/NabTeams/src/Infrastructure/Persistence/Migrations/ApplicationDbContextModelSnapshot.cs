@@ -691,6 +691,53 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.ToTable("OperationsChecklistItems");
             });
 
+            modelBuilder.Entity("NabTeams.Domain.Entities.AuditLogEntry", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid");
+
+                b.Property<string>("Action")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<string>("ActorId")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<string>("ActorName")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("EntityId")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<string>("EntityType")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<string>("Metadata")
+                    .HasMaxLength(4000)
+                    .HasColumnType("character varying(4000)");
+
+                b.HasKey("Id");
+
+                b.HasIndex("CreatedAt");
+
+                b.HasIndex("EntityType", "EntityId");
+
+                b.ToTable("AuditLogs");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", b =>
             {
                 b.Property<Guid>("Id")

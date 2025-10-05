@@ -20,12 +20,39 @@ public class RegistrationsControllerTests
         Mock<IRegistrationRepository> repository,
         Mock<IRegistrationDocumentStorage>? storage = null,
         Mock<IRegistrationWorkflowService>? workflow = null,
-        Mock<IRegistrationSummaryBuilder>? summaryBuilder = null)
+        Mock<IRegistrationSummaryBuilder>? summaryBuilder = null,
+        Mock<IAuditLogService>? auditLog = null)
     {
         storage ??= new Mock<IRegistrationDocumentStorage>();
         workflow ??= new Mock<IRegistrationWorkflowService>();
         summaryBuilder ??= new Mock<IRegistrationSummaryBuilder>();
-        return new RegistrationsController(repository.Object, storage.Object, workflow.Object, summaryBuilder.Object);
+        auditLog ??= new Mock<IAuditLogService>();
+        auditLog.Setup(a => a.LogAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuditLogEntry
+            {
+                Id = Guid.NewGuid(),
+                ActorId = "actor",
+                ActorName = "actor",
+                Action = "Registrations.Participant.Create",
+                EntityType = nameof(ParticipantRegistration),
+                EntityId = Guid.NewGuid().ToString(),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+
+        return new RegistrationsController(repository.Object, storage.Object, workflow.Object, summaryBuilder.Object, auditLog.Object)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext()
+            }
+        };
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using NabTeams.Application.Abstractions;
@@ -15,9 +16,33 @@ namespace NabTeams.Api.Tests;
 
 public class IntegrationSettingsControllerTests
 {
-    private static IntegrationSettingsController CreateController(Mock<IIntegrationSettingsService> service)
+    private static IntegrationSettingsController CreateController(
+        Mock<IIntegrationSettingsService> service,
+        Mock<IAuditLogService>? auditLog = null)
     {
-        return new IntegrationSettingsController(service.Object)
+        auditLog ??= new Mock<IAuditLogService>();
+        auditLog.Setup(a => a.LogAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string actorId, string actorName, string action, string entityType, string entityId, object? metadata, CancellationToken _) =>
+                new AuditLogEntry
+                {
+                    Id = Guid.NewGuid(),
+                    ActorId = actorId,
+                    ActorName = actorName,
+                    Action = action,
+                    EntityType = entityType,
+                    EntityId = entityId,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    Metadata = metadata?.ToString()
+                });
+
+        return new IntegrationSettingsController(service.Object, auditLog.Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -78,7 +103,7 @@ public class IntegrationSettingsControllerTests
         var request = new IntegrationSettingsController.IntegrationSettingUpsertRequest
         {
             Type = "Gemini",
-            ProviderKey = ""
+            ProviderKey = "",
         };
 
         var result = await controller.UpsertAsync(request, CancellationToken.None);
@@ -92,6 +117,7 @@ public class IntegrationSettingsControllerTests
     public async Task UpsertAsync_DelegatesToService_WhenPayloadValid()
     {
         var service = new Mock<IIntegrationSettingsService>();
+        var auditLog = new Mock<IAuditLogService>();
         var saved = new IntegrationSetting
         {
             Id = Guid.NewGuid(),
@@ -107,7 +133,26 @@ public class IntegrationSettingsControllerTests
         service.Setup(s => s.UpsertAsync(It.IsAny<IntegrationSetting>(), true, It.IsAny<CancellationToken>()))
             .ReturnsAsync(saved);
 
-        var controller = CreateController(service);
+        auditLog.Setup(a => a.LogAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuditLogEntry
+            {
+                Id = Guid.NewGuid(),
+                ActorId = "actor",
+                ActorName = "actor",
+                Action = "IntegrationSettings.Update",
+                EntityType = nameof(IntegrationSetting),
+                EntityId = saved.Id.ToString(),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+
+        var controller = CreateController(service, auditLog);
 
         var request = new IntegrationSettingsController.IntegrationSettingUpsertRequest
         {
@@ -124,18 +169,55 @@ public class IntegrationSettingsControllerTests
         var payload = Assert.IsType<IntegrationSettingsController.IntegrationSettingResponse>(ok.Value);
         Assert.Equal(saved.Id, payload.Id);
         service.Verify(s => s.UpsertAsync(It.IsAny<IntegrationSetting>(), true, It.IsAny<CancellationToken>()), Times.Once);
+        auditLog.Verify(a => a.LogAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            "IntegrationSettings.Update",
+            nameof(IntegrationSetting),
+            saved.Id.ToString(),
+            It.IsAny<object?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ActivateAsync_CallsService()
+    public async Task ActivateAsync_CallsServiceAndLogs()
     {
         var service = new Mock<IIntegrationSettingsService>();
-        var controller = CreateController(service);
+        var auditLog = new Mock<IAuditLogService>();
         var id = Guid.NewGuid();
+
+        auditLog.Setup(a => a.LogAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuditLogEntry
+            {
+                Id = Guid.NewGuid(),
+                ActorId = "actor",
+                ActorName = "actor",
+                Action = "IntegrationSettings.Activate",
+                EntityType = nameof(IntegrationSetting),
+                EntityId = id.ToString(),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+
+        var controller = CreateController(service, auditLog);
 
         var result = await controller.ActivateAsync(id, CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
         service.Verify(s => s.SetActiveAsync(id, It.IsAny<CancellationToken>()), Times.Once);
+        auditLog.Verify(a => a.LogAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            "IntegrationSettings.Activate",
+            nameof(IntegrationSetting),
+            id.ToString(),
+            null,
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }

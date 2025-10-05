@@ -21,6 +21,7 @@ export type BusinessPlanReviewStatus = 'Pending' | 'Completed' | 'Failed';
 
 export type IntegrationProviderType = 'Gemini' | 'PaymentGateway' | 'Sms' | 'Email';
 export type OperationsChecklistStatus = 'Pending' | 'InProgress' | 'Completed';
+export type AuditLogAction = string;
 
 export interface SessionUserInfo {
   id?: string | null;
@@ -454,6 +455,46 @@ export async function deleteIntegrationSetting(id: string, auth?: AuthContext): 
     method: 'DELETE',
     ...auth
   });
+}
+
+export interface AuditLogRecord {
+  id: string;
+  actorId: string;
+  actorName: string;
+  action: AuditLogAction;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+  metadata?: unknown;
+}
+
+export interface AuditLogFilters {
+  entityType?: string;
+  entityId?: string;
+  skip?: number;
+  take?: number;
+}
+
+export async function listAuditLogs(
+  auth?: AuthContext,
+  filters: AuditLogFilters = {}
+): Promise<AuditLogRecord[]> {
+  const params = new URLSearchParams();
+  if (filters.entityType) {
+    params.set('entityType', filters.entityType);
+  }
+  if (filters.entityId) {
+    params.set('entityId', filters.entityId);
+  }
+  if (typeof filters.skip === 'number') {
+    params.set('skip', String(filters.skip));
+  }
+  if (typeof filters.take === 'number') {
+    params.set('take', String(filters.take));
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return apiFetch<AuditLogRecord[]>(`/api/admin/audit-logs${query}`, auth);
 }
 
 export interface OperationsChecklistItem {

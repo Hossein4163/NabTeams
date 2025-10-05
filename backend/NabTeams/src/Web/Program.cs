@@ -20,6 +20,7 @@ using OpenTelemetry.Resources;
 using Polly;
 using Polly.Extensions.Http;
 using NabTeams.Application.Abstractions;
+using NabTeams.Application.Auditing;
 using NabTeams.Application.Common;
 using NabTeams.Application.Integrations;
 using NabTeams.Application.Operations;
@@ -180,6 +181,8 @@ builder.Services.AddSingleton<IRateLimiter, SlidingWindowRateLimiter>();
 builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
 builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
 builder.Services.AddScoped<IOperationsChecklistRepository, EfOperationsChecklistRepository>();
 builder.Services.AddScoped<IIntegrationSettingsRepository, EfIntegrationSettingsRepository>();
@@ -253,6 +256,8 @@ if (!app.Environment.IsDevelopment())
 app.UseResponseCompression();
 app.UseSecurityHeaders();
 app.UseStaticFiles(registrationDocumentStaticFiles);
+
+app.UseStaticFiles();
 
 app.UseStaticFiles();
 

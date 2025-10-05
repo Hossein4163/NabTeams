@@ -28,6 +28,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<BusinessPlanReviewEntity> BusinessPlanReviews => Set<BusinessPlanReviewEntity>();
     public DbSet<IntegrationSettingEntity> IntegrationSettings => Set<IntegrationSettingEntity>();
     public DbSet<OperationsChecklistItemEntity> OperationsChecklistItems => Set<OperationsChecklistItemEntity>();
+    public DbSet<AuditLogEntry> AuditLogs => Set<AuditLogEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -259,6 +260,22 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.UpdatedAt).IsRequired();
 
             entity.HasIndex(e => e.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<AuditLogEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.ToTable("AuditLogs");
+            entity.Property(e => e.ActorId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.ActorName).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Action).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.EntityType).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.EntityId).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Metadata).HasMaxLength(4000);
+            entity.Property(e => e.CreatedAt).IsRequired();
+
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => new { e.EntityType, e.EntityId });
         });
 
         modelBuilder.Entity<JudgeRegistrationEntity>(entity =>

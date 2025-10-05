@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Operations.Models;
+using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
 using NabTeams.Web.Auth;
 
@@ -17,10 +19,12 @@ namespace NabTeams.Web.Controllers;
 public class OperationsChecklistController : ControllerBase
 {
     private readonly IOperationsChecklistService _service;
+    private readonly IAuditLogService _auditLogService;
 
-    public OperationsChecklistController(IOperationsChecklistService service)
+    public OperationsChecklistController(IOperationsChecklistService service, IAuditLogService auditLogService)
     {
         _service = service;
+        _auditLogService = auditLogService;
     }
 
     [HttpGet]
@@ -48,12 +52,40 @@ public class OperationsChecklistController : ControllerBase
         try
         {
             var updated = await _service.UpdateAsync(id, new OperationsChecklistUpdateModel(request.Status, request.Notes, request.ArtifactUrl), cancellationToken);
+
+            var (actorId, actorName) = ResolveActor();
+            await _auditLogService.LogAsync(
+                actorId,
+                actorName,
+                "OperationsChecklist.Update",
+                nameof(OperationsChecklistItemEntity),
+                updated.Id.ToString(),
+            new
+            {
+                Status = updated.Status.ToString(),
+                updated.ArtifactUrl,
+                updated.Notes
+            },
+                cancellationToken);
+
             return Ok(OperationsChecklistItemResponse.FromModel(updated));
         }
         catch (InvalidOperationException)
         {
             return NotFound();
         }
+    }
+
+    private (string Id, string Name) ResolveActor()
+    {
+        var id = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+                 ?? User?.FindFirstValue("sub")
+                 ?? HttpContext?.User?.Identity?.Name
+                 ?? "system";
+        var name = User?.Identity?.Name
+                   ?? User?.FindFirstValue("name")
+                   ?? id;
+        return (id, name);
     }
 
     public record OperationsChecklistUpdateRequest

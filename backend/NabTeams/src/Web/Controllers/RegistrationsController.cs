@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -26,17 +27,20 @@ public class RegistrationsController : ControllerBase
     private readonly IRegistrationDocumentStorage _documentStorage;
     private readonly IRegistrationWorkflowService _workflowService;
     private readonly IRegistrationSummaryBuilder _summaryBuilder;
+    private readonly IAuditLogService _auditLogService;
 
     public RegistrationsController(
         IRegistrationRepository repository,
         IRegistrationDocumentStorage documentStorage,
         IRegistrationWorkflowService workflowService,
-        IRegistrationSummaryBuilder summaryBuilder)
+        IRegistrationSummaryBuilder summaryBuilder,
+        IAuditLogService auditLogService)
     {
         _repository = repository;
         _documentStorage = documentStorage;
         _workflowService = workflowService;
         _summaryBuilder = summaryBuilder;
+        _auditLogService = auditLogService;
     }
 
     [HttpPost("participants")]
@@ -55,6 +59,20 @@ public class RegistrationsController : ControllerBase
 
         var registration = request.ToDomain();
         var stored = await _repository.AddParticipantAsync(registration, cancellationToken);
+
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            "Registrations.Participant.Create",
+            nameof(ParticipantRegistration),
+            stored.Id.ToString(),
+            new
+            {
+                TeamName = stored.TeamName,
+                Status = stored.Status.ToString()
+            },
+            cancellationToken);
         var response = ParticipantRegistrationResponse.FromDomain(stored);
 
         return CreatedAtAction(nameof(GetParticipantAsync), new { id = response.Id }, response);
@@ -176,6 +194,20 @@ public class RegistrationsController : ControllerBase
             return NotFound();
         }
 
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            "Registrations.Participant.Update",
+            nameof(ParticipantRegistration),
+            stored.Id.ToString(),
+            new
+            {
+                TeamName = stored.TeamName,
+                Status = stored.Status.ToString()
+            },
+            cancellationToken);
+
         return Ok(ParticipantRegistrationResponse.FromDomain(stored));
     }
 
@@ -217,6 +249,20 @@ public class RegistrationsController : ControllerBase
         {
             return NotFound();
         }
+
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            "Registrations.Participant.Finalize",
+            nameof(ParticipantRegistration),
+            stored.Id.ToString(),
+            new
+            {
+                Status = stored.Status.ToString(),
+                stored.SummaryFileUrl
+            },
+            cancellationToken);
 
         return Ok(ParticipantRegistrationResponse.FromDomain(stored));
     }
@@ -260,6 +306,22 @@ public class RegistrationsController : ControllerBase
             return NotFound();
         }
 
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            "Registrations.Participant.Approve",
+            nameof(ParticipantRegistration),
+            id.ToString(),
+            new
+            {
+                Amount = request.Amount,
+                Currency = request.Currency ?? "IRR",
+                request.Recipient,
+                request.ReturnUrl
+            },
+            cancellationToken);
+
         return Ok(ParticipantRegistrationResponse.FromDomain(result));
     }
 
@@ -279,7 +341,32 @@ public class RegistrationsController : ControllerBase
             return NotFound();
         }
 
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            "Registrations.Participant.PaymentComplete",
+            nameof(ParticipantRegistration),
+            id.ToString(),
+            new
+            {
+                request.GatewayReference
+            },
+            cancellationToken);
+
         return Ok(ParticipantRegistrationResponse.FromDomain(result));
+    }
+
+    private (string Id, string Name) ResolveActor()
+    {
+        var id = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+                 ?? User?.FindFirstValue("sub")
+                 ?? HttpContext?.User?.Identity?.Name
+                 ?? "system";
+        var name = User?.Identity?.Name
+                   ?? User?.FindFirstValue("name")
+                   ?? id;
+        return (id, name);
     }
 
     [HttpPost("participants/{id:guid}/analysis")]

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -21,10 +22,12 @@ namespace NabTeams.Web.Controllers;
 public class IntegrationSettingsController : ControllerBase
 {
     private readonly IIntegrationSettingsService _service;
+    private readonly IAuditLogService _auditLogService;
 
-    public IntegrationSettingsController(IIntegrationSettingsService service)
+    public IntegrationSettingsController(IIntegrationSettingsService service, IAuditLogService auditLogService)
     {
         _service = service;
+        _auditLogService = auditLogService;
     }
 
     [HttpGet]
@@ -112,6 +115,23 @@ public class IntegrationSettingsController : ControllerBase
             };
 
         var saved = await _service.UpsertAsync(model, request.Activate, cancellationToken);
+
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            existing is null ? "IntegrationSettings.Create" : "IntegrationSettings.Update",
+            nameof(IntegrationSetting),
+            saved.Id.ToString(),
+            new
+            {
+                Type = saved.Type.ToString(),
+                saved.ProviderKey,
+                saved.IsActive,
+                Activate = request.Activate
+            },
+            cancellationToken);
+
         return Ok(IntegrationSettingResponse.FromModel(saved));
     }
 
@@ -121,6 +141,16 @@ public class IntegrationSettingsController : ControllerBase
     public async Task<IActionResult> ActivateAsync(Guid id, CancellationToken cancellationToken)
     {
         await _service.SetActiveAsync(id, cancellationToken);
+
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            "IntegrationSettings.Activate",
+            nameof(IntegrationSetting),
+            id.ToString(),
+            null,
+            cancellationToken);
         return NoContent();
     }
 
@@ -130,7 +160,29 @@ public class IntegrationSettingsController : ControllerBase
     public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         await _service.DeleteAsync(id, cancellationToken);
+
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            "IntegrationSettings.Delete",
+            nameof(IntegrationSetting),
+            id.ToString(),
+            null,
+            cancellationToken);
         return NoContent();
+    }
+
+    private (string Id, string Name) ResolveActor()
+    {
+        var id = User?.FindFirstValue(ClaimTypes.NameIdentifier)
+                 ?? User?.FindFirstValue("sub")
+                 ?? HttpContext?.User?.Identity?.Name
+                 ?? "system";
+        var name = User?.Identity?.Name
+                   ?? User?.FindFirstValue("name")
+                   ?? id;
+        return (id, name);
     }
 
     private static IntegrationProviderType? ParseType(string? type, bool allowNull)

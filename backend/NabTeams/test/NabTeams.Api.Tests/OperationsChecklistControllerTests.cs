@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Operations.Models;
+using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
 using NabTeams.Web.Controllers;
 using Xunit;
@@ -15,9 +17,31 @@ namespace NabTeams.Api.Tests;
 
 public class OperationsChecklistControllerTests
 {
-    private static OperationsChecklistController CreateController(Mock<IOperationsChecklistService> service)
+    private static OperationsChecklistController CreateController(
+        Mock<IOperationsChecklistService> service,
+        Mock<IAuditLogService>? auditLog = null)
     {
-        return new OperationsChecklistController(service.Object)
+        auditLog ??= new Mock<IAuditLogService>();
+        auditLog.Setup(a => a.LogAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuditLogEntry
+            {
+                Id = Guid.NewGuid(),
+                ActorId = "actor",
+                ActorName = "actor",
+                Action = "OperationsChecklist.Update",
+                EntityType = nameof(OperationsChecklistItemEntity),
+                EntityId = Guid.NewGuid().ToString(),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+
+        return new OperationsChecklistController(service.Object, auditLog.Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -84,9 +108,10 @@ public class OperationsChecklistControllerTests
     }
 
     [Fact]
-    public async Task UpdateAsync_ReturnsUpdatedItem()
+    public async Task UpdateAsync_ReturnsUpdatedItemAndLogs()
     {
         var service = new Mock<IOperationsChecklistService>();
+        var auditLog = new Mock<IAuditLogService>();
         var itemId = Guid.NewGuid();
         var model = new OperationsChecklistItemModel(
             itemId,
@@ -103,7 +128,27 @@ public class OperationsChecklistControllerTests
 
         service.Setup(s => s.UpdateAsync(itemId, It.IsAny<OperationsChecklistUpdateModel>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(model);
-        var controller = CreateController(service);
+
+        auditLog.Setup(a => a.LogAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<object?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AuditLogEntry
+            {
+                Id = Guid.NewGuid(),
+                ActorId = "actor",
+                ActorName = "actor",
+                Action = "OperationsChecklist.Update",
+                EntityType = nameof(OperationsChecklistItemEntity),
+                EntityId = itemId.ToString(),
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+
+        var controller = CreateController(service, auditLog);
 
         var request = new OperationsChecklistController.OperationsChecklistUpdateRequest
         {
@@ -118,5 +163,13 @@ public class OperationsChecklistControllerTests
         var payload = Assert.IsType<OperationsChecklistController.OperationsChecklistItemResponse>(ok.Value);
         Assert.Equal("security-scan", payload.Key);
         Assert.Equal(OperationsChecklistStatus.Completed, payload.Status);
+        auditLog.Verify(a => a.LogAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            "OperationsChecklist.Update",
+            nameof(OperationsChecklistItemEntity),
+            itemId.ToString(),
+            It.IsAny<object?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 }
