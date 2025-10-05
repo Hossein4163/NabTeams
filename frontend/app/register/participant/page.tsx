@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ParticipantDocumentInput,
   ParticipantLinkInput,
@@ -12,6 +12,8 @@ import {
   RegistrationStatus,
   RegistrationPaymentStatus,
   NotificationChannel,
+  EventResponse,
+  listEvents,
   finalizeParticipantRegistration,
   submitParticipantRegistration,
   updateParticipantRegistration,
@@ -39,6 +41,7 @@ type ParticipantFormState = {
   birthDate: string;
   educationDegree: string;
   fieldOfStudy: string;
+  eventId: string;
   teamName: string;
   hasTeam: boolean;
   teamCompleted: boolean;
@@ -110,6 +113,7 @@ function createInitialState(): ParticipantFormState {
     birthDate: '',
     educationDegree: '',
     fieldOfStudy: '',
+    eventId: '',
     teamName: '',
     hasTeam: true,
     teamCompleted: false,
@@ -136,6 +140,7 @@ function createStateFromResponse(response: ParticipantRegistrationResponse): Par
     birthDate: response.birthDate ?? '',
     educationDegree: response.educationDegree,
     fieldOfStudy: response.fieldOfStudy,
+    eventId: response.eventId ?? '',
     teamName: response.teamName,
     hasTeam: response.hasTeam,
     teamCompleted: response.teamCompleted,
@@ -167,6 +172,37 @@ export default function ParticipantRegistrationPage() {
   const [registrationId, setRegistrationId] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
   const [uploadingDocuments, setUploadingDocuments] = useState<Record<number, boolean>>({});
+  const [events, setEvents] = useState<EventResponse[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventError, setEventError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setEventsLoading(true);
+    listEvents()
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+        setEvents(data);
+        setEventError(null);
+      })
+      .catch((err) => {
+        if (cancelled) {
+          return;
+        }
+        setEventError(err instanceof Error ? err.message : 'دریافت فهرست رویدادها ناموفق بود.');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setEventsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const hasPendingUploads = useMemo(
     () => Object.values(uploadingDocuments).some(Boolean),
@@ -191,6 +227,17 @@ export default function ParticipantRegistrationPage() {
     () => form.links.filter((link) => link.url.trim()),
     [form.links]
   );
+
+  const selectedEvent = useMemo(
+    () => events.find((event) => event.id === form.eventId) ?? null,
+    [events, form.eventId]
+  );
+
+  useEffect(() => {
+    if (!eventsLoading && events.length > 0 && !form.eventId) {
+      updateField('eventId', events[0].id);
+    }
+  }, [eventsLoading, events, form.eventId]);
 
   const totalSteps = stepLabels.length;
 
@@ -318,6 +365,10 @@ export default function ParticipantRegistrationPage() {
 
   function validateStep(index: number): boolean {
     if (index === 0) {
+      if (!form.eventId.trim()) {
+        setError('لطفاً رویداد خود را انتخاب کنید.');
+        return false;
+      }
       if (!form.headFirstName.trim() || !form.headLastName.trim()) {
         setError('لطفاً نام و نام خانوادگی سرپرست را وارد کنید.');
         return false;
@@ -394,6 +445,11 @@ export default function ParticipantRegistrationPage() {
       return;
     }
 
+    if (!form.eventId.trim()) {
+      setError('انتخاب رویداد الزامی است.');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -406,6 +462,7 @@ export default function ParticipantRegistrationPage() {
       birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : null,
       educationDegree: form.educationDegree.trim(),
       fieldOfStudy: form.fieldOfStudy.trim(),
+      eventId: form.eventId,
       teamName: form.teamName.trim(),
       hasTeam: form.hasTeam,
       teamCompleted: form.hasTeam ? form.teamCompleted : false,
@@ -461,6 +518,7 @@ export default function ParticipantRegistrationPage() {
     const canFinalize = result.status === 'Submitted';
     const payment = result.payment;
     const pendingPayment = payment?.status === 'Pending';
+    const aiTasksEnabled = result.event?.aiTaskManagerEnabled ?? false;
     const formattedAmount = payment
       ? new Intl.NumberFormat('fa-IR').format(payment.amount)
       : null;
@@ -493,6 +551,10 @@ export default function ParticipantRegistrationPage() {
             <div>
               <dt className="text-slate-400">نام تیم</dt>
               <dd>{result.teamName}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">رویداد</dt>
+              <dd>{result.event?.name ?? 'انتخاب نشده'}</dd>
             </div>
             <div>
               <dt className="text-slate-400">تاریخ ثبت</dt>
@@ -666,6 +728,14 @@ export default function ParticipantRegistrationPage() {
               {finalizing ? 'در حال تأیید...' : 'تأیید نهایی'}
             </button>
           )}
+          {aiTasksEnabled && (
+            <a
+              href={`/dashboard/tasks?id=${result.id}`}
+              className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
+            >
+              مدیریت تسک‌های تیم
+            </a>
+          )}
           <a
             href={`/dashboard/registration?id=${result.id}`}
             className="inline-flex items-center justify-center rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800/60"
@@ -696,6 +766,47 @@ export default function ParticipantRegistrationPage() {
       {step === 0 && (
         <section className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-slate-300">
+                انتخاب رویداد
+              </label>
+              {eventsLoading ? (
+                <p className="text-xs text-slate-400">در حال بارگذاری رویدادها...</p>
+              ) : events.length > 0 ? (
+                <select
+                  value={form.eventId}
+                  onChange={(event) => updateField('eventId', event.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                >
+                  {events.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-xs text-amber-300">
+                  هیچ رویدادی برای ثبت‌نام فعال نشده است. لطفاً با ادمین تماس بگیرید.
+                </p>
+              )}
+              {selectedEvent && (
+                <p className="mt-1 text-xs text-slate-400">
+                  {selectedEvent.description ?? 'بدون توضیحات اضافی.'}
+                  {selectedEvent.startsAt && (
+                    <>
+                      {' '}
+                      | بازه: {new Date(selectedEvent.startsAt).toLocaleDateString('fa-IR')} تا{' '}
+                      {selectedEvent.endsAt
+                        ? new Date(selectedEvent.endsAt).toLocaleDateString('fa-IR')
+                        : 'نامشخص'}
+                    </>
+                  )}
+                </p>
+              )}
+              {eventError && (
+                <p className="mt-1 text-xs text-red-300">{eventError}</p>
+              )}
+            </div>
             <TextField
               label="نام"
               value={form.headFirstName}
@@ -1003,6 +1114,9 @@ export default function ParticipantRegistrationPage() {
               <span className="text-slate-400">سرپرست:</span> {form.headFirstName || '—'} {form.headLastName || ''} — {form.phoneNumber || 'بدون شماره'}
             </p>
             <p>
+              <span className="text-slate-400">رویداد:</span> {selectedEvent?.name ?? 'انتخاب نشده'}
+            </p>
+            <p>
               <span className="text-slate-400">نام تیم:</span> {form.teamName || '—'} |{' '}
               {form.hasTeam ? (form.teamCompleted ? 'تیم تکمیل شده' : 'در حال تکمیل') : 'بدون تیم'}
             </p>
@@ -1037,7 +1151,7 @@ export default function ParticipantRegistrationPage() {
           <button
             type="button"
             onClick={handleNext}
-            disabled={submitting}
+            disabled={submitting || (step === 0 && (eventsLoading || !form.eventId))}
             className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
           >
             مرحله بعد

@@ -17,6 +17,9 @@ public record ParticipantRegistration
         = null;
     public string EducationDegree { get; init; } = string.Empty;
     public string FieldOfStudy { get; init; } = string.Empty;
+    public Guid EventId { get; init; } = Guid.Empty;
+    public EventSummary? Event { get; init; }
+        = null;
     public string TeamName { get; init; } = string.Empty;
     public bool HasTeam { get; init; }
         = true;
@@ -28,6 +31,8 @@ public record ParticipantRegistration
         = Array.Empty<RegistrationDocument>();
     public IReadOnlyCollection<RegistrationLink> Links { get; init; }
         = Array.Empty<RegistrationLink>();
+    public IReadOnlyCollection<ParticipantTask> Tasks { get; init; }
+        = Array.Empty<ParticipantTask>();
     public RegistrationPayment? Payment { get; init; }
         = null;
     public IReadOnlyCollection<RegistrationNotification> Notifications { get; init; }

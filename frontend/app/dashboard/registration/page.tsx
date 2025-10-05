@@ -215,6 +215,11 @@ export default function RegistrationDashboardPage() {
                   تأیید نهایی توسط تیم در {new Date(registration.finalizedAt).toLocaleString('fa-IR')}
                 </p>
               )}
+              {registration.event?.aiTaskManagerEnabled && (
+                <p className="text-xs text-emerald-200/80">
+                  تسک‌منیجر هوش مصنوعی برای رویداد «{registration.event?.name ?? 'بدون نام'}» فعال است؛ از لینک زیر می‌توانید تسک‌های تیم را مدیریت کنید.
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -224,6 +229,21 @@ export default function RegistrationDashboardPage() {
               به‌روزرسانی وضعیت
             </button>
           </div>
+
+          {registration.event?.aiTaskManagerEnabled && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-emerald-600/40 bg-emerald-500/5 p-4 text-sm text-emerald-100">
+              <div className="flex-1">
+                <p className="font-medium text-emerald-200">تسک‌های تیم خود را از یک جا مدیریت کنید.</p>
+                <p className="text-xs text-emerald-200/80">با کلیک روی دکمه زیر، لیست تسک‌ها، وضعیت‌ها و پیشنهادهای هوش مصنوعی را مشاهده کنید.</p>
+              </div>
+              <a
+                href={`/dashboard/tasks?id=${registration.id}`}
+                className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-xs font-medium text-emerald-950 transition hover:bg-emerald-400"
+              >
+                مدیریت تسک‌های تیم
+              </a>
+            </div>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2 rounded-lg border border-slate-800/70 bg-slate-900/60 p-4 text-sm text-slate-200">

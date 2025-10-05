@@ -2,11 +2,84 @@ using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 namespace NabTeams.Infrastructure.Persistence;
 
 public static class EntityMappingExtensions
 {
+    public static EventSummary ToSummary(this EventEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            Description = entity.Description,
+            StartsAt = entity.StartsAt,
+            EndsAt = entity.EndsAt,
+            AiTaskManagerEnabled = entity.AiTaskManagerEnabled
+        };
+
+    public static EventDetail ToDetail(this EventEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            Description = entity.Description,
+            StartsAt = entity.StartsAt,
+            EndsAt = entity.EndsAt,
+            AiTaskManagerEnabled = entity.AiTaskManagerEnabled,
+            SampleTasks = (entity.Tasks ?? new List<ParticipantTaskEntity>())
+                .OrderBy(t => t.DueAt ?? DateTimeOffset.MaxValue)
+                .ThenBy(t => t.CreatedAt)
+                .Take(5)
+                .Select(t => t.ToModel())
+                .ToList()
+        };
+
+    public static EventEntity ToEntity(this EventDetail detail)
+        => new()
+        {
+            Id = detail.Id,
+            Name = detail.Name,
+            Description = detail.Description,
+            StartsAt = detail.StartsAt,
+            EndsAt = detail.EndsAt,
+            AiTaskManagerEnabled = detail.AiTaskManagerEnabled,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+    public static ParticipantTask ToModel(this ParticipantTaskEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            ParticipantRegistrationId = entity.ParticipantRegistrationId,
+            EventId = entity.EventId,
+            Title = entity.Title,
+            Description = entity.Description,
+            Status = entity.Status,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+            DueAt = entity.DueAt,
+            AssignedTo = entity.AssignedTo,
+            AiRecommendation = entity.AiRecommendation
+        };
+
+    public static ParticipantTaskEntity ToEntity(this ParticipantTask model)
+        => new()
+        {
+            Id = model.Id,
+            ParticipantRegistrationId = model.ParticipantRegistrationId,
+            EventId = model.EventId,
+            Title = model.Title,
+            Description = model.Description,
+            Status = model.Status,
+            CreatedAt = model.CreatedAt,
+            UpdatedAt = model.UpdatedAt,
+            DueAt = model.DueAt,
+            AssignedTo = model.AssignedTo,
+            AiRecommendation = model.AiRecommendation
+        };
+
     public static Message ToModel(this MessageEntity entity)
         => new()
         {
@@ -153,6 +226,8 @@ public static class EntityMappingExtensions
             EducationDegree = entity.EducationDegree,
             FieldOfStudy = entity.FieldOfStudy,
             TeamName = entity.TeamName,
+            EventId = entity.EventId,
+            Event = entity.Event?.ToSummary(),
             HasTeam = entity.HasTeam,
             TeamCompleted = entity.TeamCompleted,
             AdditionalNotes = entity.AdditionalNotes,
@@ -196,6 +271,11 @@ public static class EntityMappingExtensions
             BusinessPlanReviews = (entity.BusinessPlanReviews ?? new List<BusinessPlanReviewEntity>())
                 .OrderByDescending(r => r.CreatedAt)
                 .Select(r => r.ToModel())
+                .ToList(),
+            Tasks = (entity.Tasks ?? new List<ParticipantTaskEntity>())
+                .OrderBy(t => t.DueAt ?? DateTimeOffset.MaxValue)
+                .ThenBy(t => t.CreatedAt)
+                .Select(t => t.ToModel())
                 .ToList()
         };
 
@@ -239,6 +319,7 @@ public static class EntityMappingExtensions
             EducationDegree = model.EducationDegree,
             FieldOfStudy = model.FieldOfStudy,
             TeamName = model.TeamName,
+            EventId = model.EventId,
             HasTeam = model.HasTeam,
             TeamCompleted = model.TeamCompleted,
             AdditionalNotes = model.AdditionalNotes,
@@ -270,6 +351,16 @@ public static class EntityMappingExtensions
                 var reviewEntity = r.ToEntity();
                 reviewEntity.ParticipantRegistrationId = entity.Id;
                 return reviewEntity;
+            })
+            .ToList();
+
+        entity.Tasks = model.Tasks
+            .Select(t =>
+            {
+                var taskEntity = t.ToEntity();
+                taskEntity.ParticipantRegistrationId = entity.Id;
+                taskEntity.EventId = model.EventId;
+                return taskEntity;
             })
             .ToList();
 
@@ -332,6 +423,16 @@ public static class EntityMappingExtensions
                 var reviewEntity = r.ToEntity();
                 reviewEntity.ParticipantRegistrationId = entity.Id;
                 return reviewEntity;
+            })
+            .ToList();
+
+        entity.Tasks = model.Tasks
+            .Select(t =>
+            {
+                var taskEntity = t.ToEntity();
+                taskEntity.ParticipantRegistrationId = entity.Id;
+                taskEntity.EventId = model.EventId;
+                return taskEntity;
             })
             .ToList();
     }

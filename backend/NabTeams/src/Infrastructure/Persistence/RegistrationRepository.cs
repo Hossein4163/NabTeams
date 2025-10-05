@@ -35,6 +35,8 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
             .Include(x => x.BusinessPlanReviews)
+            .Include(x => x.Tasks)
+            .Include(x => x.Event)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         return entity?.ToModel();
@@ -50,6 +52,8 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
             .Include(x => x.BusinessPlanReviews)
+            .Include(x => x.Tasks)
+            .Include(x => x.Event)
             .OrderByDescending(x => x.FinalizedAt ?? x.SubmittedAt)
             .Take(200)
             .ToListAsync(cancellationToken);
@@ -69,6 +73,8 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
             .Include(x => x.BusinessPlanReviews)
+            .Include(x => x.Tasks)
+            .Include(x => x.Event)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)
@@ -90,6 +96,7 @@ public class EfRegistrationRepository : IRegistrationRepository
         entity.EducationDegree = registration.EducationDegree;
         entity.FieldOfStudy = registration.FieldOfStudy;
         entity.TeamName = registration.TeamName;
+        entity.EventId = registration.EventId;
         entity.HasTeam = registration.HasTeam;
         entity.TeamCompleted = registration.TeamCompleted;
         entity.AdditionalNotes = registration.AdditionalNotes;
@@ -112,6 +119,8 @@ public class EfRegistrationRepository : IRegistrationRepository
             .Include(x => x.Payment)
             .Include(x => x.Notifications)
             .Include(x => x.BusinessPlanReviews)
+            .Include(x => x.Tasks)
+            .Include(x => x.Event)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity is null)

@@ -22,6 +22,47 @@ export type BusinessPlanReviewStatus = 'Pending' | 'Completed' | 'Failed';
 export type IntegrationProviderType = 'Gemini' | 'PaymentGateway' | 'Sms' | 'Email';
 export type OperationsChecklistStatus = 'Pending' | 'InProgress' | 'Completed';
 export type AuditLogAction = string;
+export type ParticipantTaskStatus = 'Todo' | 'InProgress' | 'Blocked' | 'Completed' | 'Archived';
+
+export interface EventSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  aiTaskManagerEnabled: boolean;
+}
+
+export interface ParticipantTaskModel {
+  id: string;
+  eventId: string;
+  title: string;
+  description: string;
+  status: ParticipantTaskStatus;
+  createdAt: string;
+  updatedAt: string | null;
+  dueAt: string | null;
+  assignedTo: string | null;
+  aiRecommendation: string | null;
+}
+
+export interface EventResponse extends EventSummary {
+  sampleTasks: ParticipantTaskPreview[];
+}
+
+export interface ParticipantTaskPreview {
+  title: string;
+  status: ParticipantTaskStatus;
+  dueAt: string | null;
+  assignedTo: string | null;
+}
+
+export interface ParticipantTaskAdviceResult {
+  summary: string;
+  suggestedTasks: string[];
+  risks: string | null;
+  nextSteps: string | null;
+}
 
 export interface SessionUserInfo {
   id?: string | null;
@@ -272,6 +313,7 @@ export interface ParticipantRegistrationPayload {
   birthDate?: string | null;
   educationDegree: string;
   fieldOfStudy: string;
+  eventId: string;
   teamName: string;
   hasTeam: boolean;
   teamCompleted: boolean;
@@ -291,6 +333,8 @@ export interface ParticipantRegistrationResponse {
   birthDate: string | null;
   educationDegree: string;
   fieldOfStudy: string;
+  eventId: string;
+  event: EventSummary | null;
   teamName: string;
   hasTeam: boolean;
   submittedAt: string;
@@ -305,6 +349,7 @@ export interface ParticipantRegistrationResponse {
   payment: ParticipantPayment | null;
   notifications: ParticipantNotification[];
   businessPlanReviews: BusinessPlanReview[];
+  tasks: ParticipantTaskModel[];
 }
 
 export interface ParticipantPayment {
@@ -358,6 +403,123 @@ export async function updateParticipantRegistration(
 ): Promise<ParticipantRegistrationResponse> {
   return apiFetch<ParticipantRegistrationResponse>(`/api/registrations/participants/${id}`, {
     method: 'PUT',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export interface EventRequest {
+  name: string;
+  description?: string | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  aiTaskManagerEnabled: boolean;
+}
+
+export async function listEvents(auth?: AuthContext): Promise<EventResponse[]> {
+  return apiFetch<EventResponse[]>('/api/events', auth);
+}
+
+export async function getEvent(id: string, auth?: AuthContext): Promise<EventResponse> {
+  return apiFetch<EventResponse>(`/api/events/${id}`, auth);
+}
+
+export async function createEvent(payload: EventRequest, auth?: AuthContext): Promise<EventResponse> {
+  return apiFetch<EventResponse>('/api/events', {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateEvent(id: string, payload: EventRequest, auth?: AuthContext): Promise<EventResponse> {
+  return apiFetch<EventResponse>(`/api/events/${id}`, {
+    method: 'PUT',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteEvent(id: string, auth?: AuthContext): Promise<void> {
+  await apiFetch<void>(`/api/events/${id}`, {
+    method: 'DELETE',
+    ...auth
+  });
+}
+
+export interface ParticipantTaskPayload {
+  eventId: string;
+  title: string;
+  description?: string;
+  dueAt?: string | null;
+  assignedTo?: string | null;
+}
+
+export interface ParticipantTaskStatusPayload {
+  status: ParticipantTaskStatus;
+}
+
+export interface ParticipantTaskAdvicePayload {
+  context?: string | null;
+  focusArea?: string | null;
+}
+
+export async function listParticipantTasks(participantId: string, auth?: AuthContext): Promise<ParticipantTaskModel[]> {
+  return apiFetch<ParticipantTaskModel[]>(`/api/registrations/participants/${participantId}/tasks`, auth);
+}
+
+export async function createParticipantTask(
+  participantId: string,
+  payload: ParticipantTaskPayload,
+  auth?: AuthContext
+): Promise<ParticipantTaskModel> {
+  return apiFetch<ParticipantTaskModel>(`/api/registrations/participants/${participantId}/tasks`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateParticipantTask(
+  participantId: string,
+  taskId: string,
+  payload: ParticipantTaskPayload,
+  auth?: AuthContext
+): Promise<ParticipantTaskModel> {
+  return apiFetch<ParticipantTaskModel>(`/api/registrations/participants/${participantId}/tasks/${taskId}`, {
+    method: 'PUT',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateParticipantTaskStatus(
+  participantId: string,
+  taskId: string,
+  payload: ParticipantTaskStatusPayload,
+  auth?: AuthContext
+): Promise<ParticipantTaskModel> {
+  return apiFetch<ParticipantTaskModel>(`/api/registrations/participants/${participantId}/tasks/${taskId}/status`, {
+    method: 'PATCH',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteParticipantTask(participantId: string, taskId: string, auth?: AuthContext): Promise<void> {
+  await apiFetch<void>(`/api/registrations/participants/${participantId}/tasks/${taskId}`, {
+    method: 'DELETE',
+    ...auth
+  });
+}
+
+export async function requestTaskAdvice(
+  participantId: string,
+  payload: ParticipantTaskAdvicePayload,
+  auth?: AuthContext
+): Promise<ParticipantTaskAdviceResult> {
+  return apiFetch<ParticipantTaskAdviceResult>(`/api/registrations/participants/${participantId}/tasks/ai-advice`, {
+    method: 'POST',
     ...auth,
     body: JSON.stringify(payload)
   });

@@ -356,6 +356,43 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.ToTable("ModerationLogs");
             });
 
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.EventEntity", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid");
+
+                b.Property<bool>("AiTaskManagerEnabled")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("boolean")
+                    .HasDefaultValue(false);
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("Description")
+                    .HasMaxLength(1024)
+                    .HasColumnType("character varying(1024)");
+
+                b.Property<DateTimeOffset?>("EndsAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnType("character varying(200)");
+
+                b.Property<DateTimeOffset?>("StartsAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<DateTimeOffset?>("UpdatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.HasKey("Id");
+
+                b.ToTable("Events");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", b =>
             {
                 b.Property<Guid>("Id")
@@ -378,6 +415,9 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                     .IsRequired()
                     .HasMaxLength(128)
                     .HasColumnType("character varying(128)");
+
+                b.Property<Guid>("EventId")
+                    .HasColumnType("uuid");
 
                 b.Property<DateTimeOffset?>("FinalizedAt")
                     .HasColumnType("timestamp with time zone");
@@ -429,6 +469,8 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                     .HasColumnType("character varying(128)");
 
                 b.HasKey("Id");
+
+                b.HasIndex("EventId");
 
                 b.ToTable("ParticipantRegistrations");
             });
@@ -529,6 +571,57 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.HasIndex("ParticipantRegistrationId");
 
                 b.ToTable("RegistrationNotifications");
+            });
+
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.ParticipantTaskEntity", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid");
+
+                b.Property<string>("AiRecommendation")
+                    .HasMaxLength(4000)
+                    .HasColumnType("character varying(4000)");
+
+                b.Property<string>("AssignedTo")
+                    .HasMaxLength(150)
+                    .HasColumnType("character varying(150)");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("Description")
+                    .HasMaxLength(2000)
+                    .HasColumnType("character varying(2000)");
+
+                b.Property<DateTimeOffset?>("DueAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<Guid>("EventId")
+                    .HasColumnType("uuid");
+
+                b.Property<Guid>("ParticipantRegistrationId")
+                    .HasColumnType("uuid");
+
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasColumnType("text");
+
+                b.Property<string>("Title")
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnType("character varying(200)");
+
+                b.Property<DateTimeOffset?>("UpdatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.HasKey("Id");
+
+                b.HasIndex("EventId");
+
+                b.HasIndex("ParticipantRegistrationId");
+
+                b.ToTable("ParticipantTasks");
             });
 
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.BusinessPlanReviewEntity", b =>
@@ -894,6 +987,36 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.Navigation("ParticipantRegistration");
             });
 
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", b =>
+            {
+                b.HasOne("NabTeams.Infrastructure.Persistence.EventEntity", "Event")
+                    .WithMany("ParticipantRegistrations")
+                    .HasForeignKey("EventId")
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired();
+
+                b.Navigation("Event");
+            });
+
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.ParticipantTaskEntity", b =>
+            {
+                b.HasOne("NabTeams.Infrastructure.Persistence.EventEntity", "Event")
+                    .WithMany("Tasks")
+                    .HasForeignKey("EventId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.HasOne("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", "ParticipantRegistration")
+                    .WithMany("Tasks")
+                    .HasForeignKey("ParticipantRegistrationId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("Event");
+
+                b.Navigation("ParticipantRegistration");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", b =>
             {
                 b.HasOne("NabTeams.Infrastructure.Persistence.ParticipantRegistrationEntity", "ParticipantRegistration")
@@ -922,6 +1045,8 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
 
                 b.Navigation("Documents");
 
+                b.Navigation("Event");
+
                 b.Navigation("Links");
 
                 b.Navigation("Members");
@@ -929,11 +1054,20 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.Navigation("Notifications");
 
                 b.Navigation("Payment");
+
+                b.Navigation("Tasks");
             });
 
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.UserDisciplineEntity", b =>
             {
                 b.Navigation("Events");
+            });
+
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.EventEntity", b =>
+            {
+                b.Navigation("ParticipantRegistrations");
+
+                b.Navigation("Tasks");
             });
         }
     }

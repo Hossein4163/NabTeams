@@ -563,6 +563,11 @@ public class RegistrationsController : ControllerBase
             ModelState.AddModelError(nameof(request.Links), $"حداکثر {MaxLinks} لینک مجاز است.");
         }
 
+        if (request.EventId == Guid.Empty)
+        {
+            ModelState.AddModelError(nameof(request.EventId), "انتخاب رویداد برای ثبت‌نام الزامی است.");
+        }
+
         return ModelState.IsValid;
     }
 
@@ -605,6 +610,10 @@ public class RegistrationsController : ControllerBase
         public string FieldOfStudy { get; init; } = string.Empty;
 
         [Required]
+        public Guid EventId { get; init; }
+            = Guid.Empty;
+
+        [Required]
         [MaxLength(128)]
         public string TeamName { get; init; } = string.Empty;
 
@@ -627,6 +636,11 @@ public class RegistrationsController : ControllerBase
         {
             var normalizedId = id ?? existing?.Id ?? Guid.NewGuid();
             var status = existing?.Status ?? RegistrationStatus.Submitted;
+            var resolvedEventId = EventId != Guid.Empty ? EventId : existing?.EventId ?? Guid.Empty;
+            if (resolvedEventId == Guid.Empty)
+            {
+                throw new InvalidOperationException("EventId must be provided for participant registrations.");
+            }
             return new ParticipantRegistration
             {
                 Id = normalizedId,
@@ -638,6 +652,7 @@ public class RegistrationsController : ControllerBase
                 BirthDate = BirthDate.HasValue ? DateOnly.FromDateTime(BirthDate.Value.Date) : null,
                 EducationDegree = EducationDegree.Trim(),
                 FieldOfStudy = FieldOfStudy.Trim(),
+                EventId = resolvedEventId,
                 TeamName = TeamName.Trim(),
                 HasTeam = HasTeam,
                 TeamCompleted = TeamCompleted,
@@ -938,6 +953,10 @@ public class RegistrationsController : ControllerBase
             = null;
         public string EducationDegree { get; init; } = string.Empty;
         public string FieldOfStudy { get; init; } = string.Empty;
+        public Guid EventId { get; init; }
+            = Guid.Empty;
+        public EventSummaryResponse? Event { get; init; }
+            = null;
         public string TeamName { get; init; } = string.Empty;
         public bool HasTeam { get; init; }
             = true;
@@ -959,6 +978,8 @@ public class RegistrationsController : ControllerBase
             = Array.Empty<ParticipantDocumentResponse>();
         public IReadOnlyCollection<ParticipantLinkResponse> Links { get; init; }
             = Array.Empty<ParticipantLinkResponse>();
+        public IReadOnlyCollection<ParticipantTaskResponse> Tasks { get; init; }
+            = Array.Empty<ParticipantTaskResponse>();
         public ParticipantPaymentResponse? Payment { get; init; }
             = null;
         public IReadOnlyCollection<ParticipantNotificationResponse> Notifications { get; init; }
@@ -1003,6 +1024,11 @@ public class RegistrationsController : ControllerBase
                     .ToList(),
                 BusinessPlanReviews = registration.BusinessPlanReviews
                     .Select(BusinessPlanReviewResponse.FromDomain)
+                    .ToList(),
+                EventId = registration.EventId,
+                Event = registration.Event is null ? null : EventSummaryResponse.FromDomain(registration.Event),
+                Tasks = registration.Tasks
+                    .Select(ParticipantTaskResponse.FromDomain)
                     .ToList()
             };
     }
@@ -1109,6 +1135,66 @@ public class RegistrationsController : ControllerBase
                 Subject = notification.Subject,
                 Message = notification.Message,
                 SentAt = notification.SentAt
+            };
+    }
+
+    public record EventSummaryResponse
+    {
+        public Guid Id { get; init; }
+        public string Name { get; init; } = string.Empty;
+        public string? Description { get; init; }
+            = null;
+        public DateTimeOffset? StartsAt { get; init; }
+            = null;
+        public DateTimeOffset? EndsAt { get; init; }
+            = null;
+        public bool AiTaskManagerEnabled { get; init; }
+            = false;
+
+        public static EventSummaryResponse FromDomain(EventSummary summary)
+            => new()
+            {
+                Id = summary.Id,
+                Name = summary.Name,
+                Description = summary.Description,
+                StartsAt = summary.StartsAt,
+                EndsAt = summary.EndsAt,
+                AiTaskManagerEnabled = summary.AiTaskManagerEnabled
+            };
+    }
+
+    public record ParticipantTaskResponse
+    {
+        public Guid Id { get; init; }
+        public Guid EventId { get; init; }
+        public string Title { get; init; } = string.Empty;
+        public string Description { get; init; } = string.Empty;
+        public ParticipantTaskStatus Status { get; init; }
+            = ParticipantTaskStatus.Todo;
+        public DateTimeOffset CreatedAt { get; init; }
+            = DateTimeOffset.UtcNow;
+        public DateTimeOffset? UpdatedAt { get; init; }
+            = null;
+        public DateTimeOffset? DueAt { get; init; }
+            = null;
+        public string? AssignedTo { get; init; }
+            = null;
+        public string? AiRecommendation { get; init; }
+            = null;
+
+        public static ParticipantTaskResponse FromDomain(ParticipantTask task)
+            => new()
+            {
+                Id = task.Id,
+                EventId = task.EventId,
+                Title = task.Title,
+                Description = task.Description,
+                Status = task.Status,
+                CreatedAt = task.CreatedAt,
+                UpdatedAt = task.UpdatedAt,
+                DueAt = task.DueAt,
+                AssignedTo = task.AssignedTo,
+                AiRecommendation = task.AiRecommendation
             };
     }
 

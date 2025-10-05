@@ -22,9 +22,11 @@ using Polly.Extensions.Http;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Auditing;
 using NabTeams.Application.Common;
+using NabTeams.Application.Events;
 using NabTeams.Application.Integrations;
 using NabTeams.Application.Operations;
 using NabTeams.Application.Registrations;
+using NabTeams.Application.Tasks;
 using NabTeams.Infrastructure.HealthChecks;
 using NabTeams.Infrastructure.Monitoring;
 using NabTeams.Infrastructure.Persistence;
@@ -82,6 +84,20 @@ builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection
 var authenticationSettings = builder.Configuration.GetSection("Authentication").Get<AuthenticationSettings>() ?? new AuthenticationSettings { Disabled = true };
 
 builder.Services.AddHttpClient<GeminiBusinessPlanAnalyzer>((sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+            ? "https://generativelanguage.googleapis.com"
+            : options.BaseUrl.TrimEnd('/');
+        client.BaseAddress = new Uri(baseUrl + "/");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        client.Timeout = TimeSpan.FromSeconds(20);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+builder.Services.AddHttpClient<GeminiTaskAdvisor>((sp, client) =>
     {
         var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
@@ -184,15 +200,20 @@ builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
+builder.Services.AddScoped<IEventRepository, EventRepository>();
+builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<IOperationsChecklistRepository, EfOperationsChecklistRepository>();
 builder.Services.AddScoped<IIntegrationSettingsRepository, EfIntegrationSettingsRepository>();
 builder.Services.AddScoped<IIntegrationSettingsService, IntegrationSettingsService>();
+builder.Services.AddScoped<IParticipantTaskRepository, ParticipantTaskRepository>();
+builder.Services.AddScoped<IParticipantTaskService, ParticipantTaskService>();
 builder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();
 builder.Services.AddSingleton<IOperationsArtifactStorage, LocalOperationsArtifactStorage>();
 builder.Services.AddSingleton<IRegistrationSummaryBuilder, RegistrationSummaryBuilder>();
 builder.Services.AddScoped<INotificationService, ExternalNotificationService>();
 builder.Services.AddScoped<IPaymentGateway>(sp => sp.GetRequiredService<IdPayPaymentGateway>());
 builder.Services.AddScoped<IBusinessPlanAnalyzer>(sp => sp.GetRequiredService<GeminiBusinessPlanAnalyzer>());
+builder.Services.AddScoped<IAiTaskAdvisor>(sp => sp.GetRequiredService<GeminiTaskAdvisor>());
 builder.Services.AddScoped<IRegistrationWorkflowService, RegistrationWorkflowService>();
 builder.Services.AddScoped<IOperationsChecklistService, OperationsChecklistService>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
@@ -257,6 +278,8 @@ if (!app.Environment.IsDevelopment())
 app.UseResponseCompression();
 app.UseSecurityHeaders();
 app.UseStaticFiles(registrationDocumentStaticFiles);
+
+app.UseStaticFiles();
 
 app.UseStaticFiles();
 

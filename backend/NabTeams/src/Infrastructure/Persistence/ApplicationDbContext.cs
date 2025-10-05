@@ -20,7 +20,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<DisciplineEventEntity> DisciplineEvents => Set<DisciplineEventEntity>();
     public DbSet<KnowledgeBaseItemEntity> KnowledgeBaseItems => Set<KnowledgeBaseItemEntity>();
     public DbSet<AppealEntity> Appeals => Set<AppealEntity>();
+    public DbSet<EventEntity> Events => Set<EventEntity>();
     public DbSet<ParticipantRegistrationEntity> ParticipantRegistrations => Set<ParticipantRegistrationEntity>();
+    public DbSet<ParticipantTaskEntity> ParticipantTasks => Set<ParticipantTaskEntity>();
     public DbSet<JudgeRegistrationEntity> JudgeRegistrations => Set<JudgeRegistrationEntity>();
     public DbSet<InvestorRegistrationEntity> InvestorRegistrations => Set<InvestorRegistrationEntity>();
     public DbSet<RegistrationPaymentEntity> RegistrationPayments => Set<RegistrationPaymentEntity>();
@@ -45,6 +47,7 @@ public class ApplicationDbContext : DbContext
         var businessPlanStatusConverter = new EnumToStringConverter<BusinessPlanReviewStatus>();
         var integrationProviderConverter = new EnumToStringConverter<IntegrationProviderType>();
         var operationsStatusConverter = new EnumToStringConverter<OperationsChecklistStatus>();
+        var participantTaskStatusConverter = new EnumToStringConverter<ParticipantTaskStatus>();
 
         var stringListComparer = new ValueComparer<List<string>>(
             (left, right) => (left ?? new()).SequenceEqual(right ?? new()),
@@ -123,6 +126,18 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => new { e.MessageId, e.UserId }).IsUnique();
         });
 
+        modelBuilder.Entity<EventEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1024);
+            entity.Property(e => e.StartsAt).IsRequired(false);
+            entity.Property(e => e.EndsAt).IsRequired(false);
+            entity.Property(e => e.AiTaskManagerEnabled).HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt).IsRequired(false);
+        });
+
         modelBuilder.Entity<ParticipantRegistrationEntity>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -133,11 +148,17 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(128);
             entity.Property(e => e.EducationDegree).HasMaxLength(128).IsRequired();
             entity.Property(e => e.FieldOfStudy).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.EventId).IsRequired();
             entity.Property(e => e.TeamName).HasMaxLength(128).IsRequired();
             entity.Property(e => e.AdditionalNotes).HasMaxLength(1024);
             entity.Property(e => e.SubmittedAt).IsRequired();
             entity.Property(e => e.Status).HasConversion(registrationStatusConverter).IsRequired();
             entity.Property(e => e.SummaryFileUrl).HasMaxLength(512);
+
+            entity.HasOne(e => e.Event)
+                .WithMany(e => e.ParticipantRegistrations)
+                .HasForeignKey(e => e.EventId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasMany(e => e.Members)
                 .WithOne(e => e.ParticipantRegistration)
@@ -167,6 +188,29 @@ public class ApplicationDbContext : DbContext
             entity.HasMany(e => e.BusinessPlanReviews)
                 .WithOne(e => e.ParticipantRegistration)
                 .HasForeignKey(e => e.ParticipantRegistrationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.Tasks)
+                .WithOne(e => e.ParticipantRegistration)
+                .HasForeignKey(e => e.ParticipantRegistrationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ParticipantTaskEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(2000);
+            entity.Property(e => e.AssignedTo).HasMaxLength(150);
+            entity.Property(e => e.AiRecommendation).HasMaxLength(4000);
+            entity.Property(e => e.Status).HasConversion(participantTaskStatusConverter).IsRequired();
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt).IsRequired(false);
+            entity.Property(e => e.DueAt).IsRequired(false);
+
+            entity.HasOne(e => e.Event)
+                .WithMany(e => e.Tasks)
+                .HasForeignKey(e => e.EventId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -385,6 +429,26 @@ public class AppealEntity
     public DateTimeOffset? ReviewedAt { get; set; }
 }
 
+public class EventEntity
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+        = null;
+    public DateTimeOffset? StartsAt { get; set; }
+        = null;
+    public DateTimeOffset? EndsAt { get; set; }
+        = null;
+    public bool AiTaskManagerEnabled { get; set; }
+        = false;
+    public DateTimeOffset CreatedAt { get; set; }
+        = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAt { get; set; }
+        = null;
+    public List<ParticipantRegistrationEntity> ParticipantRegistrations { get; set; } = new();
+    public List<ParticipantTaskEntity> Tasks { get; set; } = new();
+}
+
 public class ParticipantRegistrationEntity
 {
     public Guid Id { get; set; }
@@ -398,6 +462,10 @@ public class ParticipantRegistrationEntity
         = null;
     public string EducationDegree { get; set; } = string.Empty;
     public string FieldOfStudy { get; set; } = string.Empty;
+    public Guid EventId { get; set; }
+        = Guid.Empty;
+    public EventEntity? Event { get; set; }
+        = null;
     public string TeamName { get; set; } = string.Empty;
     public bool HasTeam { get; set; }
         = true;
@@ -420,6 +488,7 @@ public class ParticipantRegistrationEntity
         = null;
     public List<RegistrationNotificationEntity> Notifications { get; set; } = new();
     public List<BusinessPlanReviewEntity> BusinessPlanReviews { get; set; } = new();
+    public List<ParticipantTaskEntity> Tasks { get; set; } = new();
 }
 
 public class TeamMemberEntity
@@ -512,6 +581,32 @@ public class BusinessPlanReviewEntity
         = null;
     public DateTimeOffset CreatedAt { get; set; }
         = DateTimeOffset.UtcNow;
+}
+
+public class ParticipantTaskEntity
+{
+    public Guid Id { get; set; }
+    public Guid ParticipantRegistrationId { get; set; }
+    public ParticipantRegistrationEntity? ParticipantRegistration { get; set; }
+        = null;
+    public Guid EventId { get; set; }
+        = Guid.Empty;
+    public EventEntity? Event { get; set; }
+        = null;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public ParticipantTaskStatus Status { get; set; }
+        = ParticipantTaskStatus.Todo;
+    public DateTimeOffset CreatedAt { get; set; }
+        = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAt { get; set; }
+        = null;
+    public DateTimeOffset? DueAt { get; set; }
+        = null;
+    public string? AssignedTo { get; set; }
+        = null;
+    public string? AiRecommendation { get; set; }
+        = null;
 }
 
 public class JudgeRegistrationEntity

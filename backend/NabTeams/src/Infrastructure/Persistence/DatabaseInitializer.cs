@@ -61,11 +61,46 @@ public static class DatabaseInitializer
             await context.SaveChangesAsync(cancellationToken);
         }
 
+        if (!await context.Events.AnyAsync(cancellationToken))
+        {
+            context.Events.AddRange(new[]
+            {
+                new EventEntity
+                {
+                    Id = Guid.Parse("97A1E4F0-5B85-4F1F-9EAA-9F0A9E1B7123"),
+                    Name = "رویداد شتابدهی پاییز ۱۴۰۳",
+                    Description = "رویداد سه‌ماهه با تمرکز بر استارتاپ‌های هوش مصنوعی و کشاورزی هوشمند.",
+                    StartsAt = DateTimeOffset.UtcNow.AddDays(-7),
+                    EndsAt = DateTimeOffset.UtcNow.AddMonths(2),
+                    AiTaskManagerEnabled = true,
+                    CreatedAt = DateTimeOffset.UtcNow
+                },
+                new EventEntity
+                {
+                    Id = Guid.Parse("5FD3C9F8-6D69-4C42-AE95-4F2B5DBA5E57"),
+                    Name = "رویداد سرمایه‌گذاری زمستانی",
+                    Description = "گردهمایی سرمایه‌گذاران با تمرکز بر استارتاپ‌های مرحله رشد.",
+                    StartsAt = DateTimeOffset.UtcNow.AddMonths(1),
+                    EndsAt = DateTimeOffset.UtcNow.AddMonths(3),
+                    AiTaskManagerEnabled = false,
+                    CreatedAt = DateTimeOffset.UtcNow
+                }
+            });
+
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        var defaultEvent = await context.Events
+            .AsNoTracking()
+            .OrderBy(e => e.StartsAt ?? e.CreatedAt)
+            .FirstAsync(cancellationToken);
+
         if (!await context.ParticipantRegistrations.AnyAsync(cancellationToken))
         {
             var participantRegistration = new ParticipantRegistrationEntity
             {
                 Id = Guid.Parse("58F3FC6F-0F73-4C81-8F5A-64F0D3D1BEBF"),
+                EventId = defaultEvent.Id,
                 HeadFirstName = "سارا",
                 HeadLastName = "محمودی",
                 NationalId = "1234567890",
@@ -167,6 +202,31 @@ public static class DatabaseInitializer
                         Model = "gemini-1.5-pro",
                         SourceDocumentUrl = "https://example.com/demo/pitch-deck.pdf",
                         CreatedAt = DateTimeOffset.UtcNow.AddHours(-4)
+                    }
+                },
+                Tasks = new List<ParticipantTaskEntity>
+                {
+                    new ParticipantTaskEntity
+                    {
+                        Id = Guid.Parse("F3B8A1E5-1F8A-4A2F-9C10-6E8A12DAA1C2"),
+                        EventId = defaultEvent.Id,
+                        Title = "بازبینی مدل کسب‌وکار",
+                        Description = "همه مفروضات درآمدی در بوم مدل کسب‌وکار مرور و با داده‌های کشاورزی تطبیق داده شود.",
+                        Status = ParticipantTaskStatus.InProgress,
+                        AssignedTo = "سارا محمودی",
+                        DueAt = DateTimeOffset.UtcNow.AddDays(5),
+                        CreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
+                    },
+                    new ParticipantTaskEntity
+                    {
+                        Id = Guid.Parse("C5C6D51E-7E1C-4B22-A07F-779A9EC19235"),
+                        EventId = defaultEvent.Id,
+                        Title = "دموی محصول برای منتورها",
+                        Description = "نسخه نمایشی سامانه برای ارائه هفتگی به منتورها آماده شود.",
+                        Status = ParticipantTaskStatus.Todo,
+                        AssignedTo = "علی رضایی",
+                        DueAt = DateTimeOffset.UtcNow.AddDays(10),
+                        CreatedAt = DateTimeOffset.UtcNow
                     }
                 }
             };
