@@ -116,6 +116,7 @@ builder.Services.AddSingleton<IRateLimiter, SlidingWindowRateLimiter>();
 builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
 builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
+builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
 builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();

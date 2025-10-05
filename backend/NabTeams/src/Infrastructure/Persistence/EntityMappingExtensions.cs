@@ -1,4 +1,7 @@
 using NabTeams.Domain.Entities;
+using NabTeams.Domain.Enums;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace NabTeams.Infrastructure.Persistence;
 
@@ -135,5 +138,172 @@ public static class EntityMappingExtensions
             ResolutionNotes = model.ResolutionNotes,
             ReviewedBy = model.ReviewedBy,
             ReviewedAt = model.ReviewedAt
+        };
+
+    public static ParticipantRegistration ToModel(this ParticipantRegistrationEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            HeadFirstName = entity.HeadFirstName,
+            HeadLastName = entity.HeadLastName,
+            NationalId = entity.NationalId,
+            PhoneNumber = entity.PhoneNumber,
+            Email = entity.Email,
+            BirthDate = entity.BirthDate,
+            EducationDegree = entity.EducationDegree,
+            FieldOfStudy = entity.FieldOfStudy,
+            TeamName = entity.TeamName,
+            HasTeam = entity.HasTeam,
+            TeamCompleted = entity.TeamCompleted,
+            AdditionalNotes = entity.AdditionalNotes,
+            SubmittedAt = entity.SubmittedAt,
+            Members = (entity.Members ?? new List<TeamMemberEntity>())
+                .OrderBy(m => m.FullName)
+                .Select(m => new TeamMember
+                {
+                    Id = m.Id,
+                    FullName = m.FullName,
+                    Role = m.Role,
+                    FocusArea = m.FocusArea
+                })
+                .ToList(),
+            Documents = (entity.Documents ?? new List<RegistrationDocumentEntity>())
+                .Select(d => new RegistrationDocument
+                {
+                    Id = d.Id,
+                    Category = d.Category,
+                    FileName = d.FileName,
+                    FileUrl = d.FileUrl
+                })
+                .ToList(),
+            Links = (entity.Links ?? new List<RegistrationLinkEntity>())
+                .Select(l => new RegistrationLink
+                {
+                    Id = l.Id,
+                    Type = l.Type,
+                    Label = l.Label,
+                    Url = l.Url
+                })
+                .ToList()
+        };
+
+    public static ParticipantRegistrationEntity ToEntity(this ParticipantRegistration model)
+    {
+        var entity = new ParticipantRegistrationEntity
+        {
+            Id = model.Id,
+            HeadFirstName = model.HeadFirstName,
+            HeadLastName = model.HeadLastName,
+            NationalId = model.NationalId,
+            PhoneNumber = model.PhoneNumber,
+            Email = model.Email,
+            BirthDate = model.BirthDate,
+            EducationDegree = model.EducationDegree,
+            FieldOfStudy = model.FieldOfStudy,
+            TeamName = model.TeamName,
+            HasTeam = model.HasTeam,
+            TeamCompleted = model.TeamCompleted,
+            AdditionalNotes = model.AdditionalNotes,
+            SubmittedAt = model.SubmittedAt
+        };
+
+        entity.UpdateCollections(model);
+        return entity;
+    }
+
+    public static void UpdateCollections(this ParticipantRegistrationEntity entity, ParticipantRegistration model)
+    {
+        entity.Members = model.Members
+            .Select(m => new TeamMemberEntity
+            {
+                Id = m.Id,
+                ParticipantRegistrationId = entity.Id,
+                FullName = m.FullName,
+                Role = m.Role,
+                FocusArea = m.FocusArea
+            })
+            .ToList();
+
+        entity.Documents = model.Documents
+            .Select(d => new RegistrationDocumentEntity
+            {
+                Id = d.Id,
+                ParticipantRegistrationId = entity.Id,
+                Category = d.Category,
+                FileName = d.FileName,
+                FileUrl = d.FileUrl
+            })
+            .ToList();
+
+        entity.Links = model.Links
+            .Select(l => new RegistrationLinkEntity
+            {
+                Id = l.Id,
+                ParticipantRegistrationId = entity.Id,
+                Type = l.Type,
+                Label = l.Label,
+                Url = l.Url
+            })
+            .ToList();
+    }
+
+    public static JudgeRegistration ToModel(this JudgeRegistrationEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            FirstName = entity.FirstName,
+            LastName = entity.LastName,
+            NationalId = entity.NationalId,
+            PhoneNumber = entity.PhoneNumber,
+            Email = entity.Email,
+            BirthDate = entity.BirthDate,
+            FieldOfExpertise = entity.FieldOfExpertise,
+            HighestDegree = entity.HighestDegree,
+            Biography = entity.Biography,
+            SubmittedAt = entity.SubmittedAt
+        };
+
+    public static JudgeRegistrationEntity ToEntity(this JudgeRegistration model)
+        => new()
+        {
+            Id = model.Id,
+            FirstName = model.FirstName,
+            LastName = model.LastName,
+            NationalId = model.NationalId,
+            PhoneNumber = model.PhoneNumber,
+            Email = model.Email,
+            BirthDate = model.BirthDate,
+            FieldOfExpertise = model.FieldOfExpertise,
+            HighestDegree = model.HighestDegree,
+            Biography = model.Biography,
+            SubmittedAt = model.SubmittedAt
+        };
+
+    public static InvestorRegistration ToModel(this InvestorRegistrationEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            FirstName = entity.FirstName,
+            LastName = entity.LastName,
+            NationalId = entity.NationalId,
+            PhoneNumber = entity.PhoneNumber,
+            Email = entity.Email,
+            InterestAreas = entity.InterestAreas.ToList(),
+            AdditionalNotes = entity.AdditionalNotes,
+            SubmittedAt = entity.SubmittedAt
+        };
+
+    public static InvestorRegistrationEntity ToEntity(this InvestorRegistration model)
+        => new()
+        {
+            Id = model.Id,
+            FirstName = model.FirstName,
+            LastName = model.LastName,
+            NationalId = model.NationalId,
+            PhoneNumber = model.PhoneNumber,
+            Email = model.Email,
+            InterestAreas = model.InterestAreas.ToList(),
+            AdditionalNotes = model.AdditionalNotes,
+            SubmittedAt = model.SubmittedAt
         };
 }
