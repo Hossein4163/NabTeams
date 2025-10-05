@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using NabTeams.Application.Abstractions;
 
@@ -12,15 +13,19 @@ namespace NabTeams.Infrastructure.Services;
 public class LocalRegistrationDocumentStorage : IRegistrationDocumentStorage
 {
     private readonly IHostEnvironment _environment;
+    private readonly string? _customRoot;
+    private readonly string? _publicBaseUrl;
 
-    public LocalRegistrationDocumentStorage(IHostEnvironment environment)
+    public LocalRegistrationDocumentStorage(IHostEnvironment environment, IConfiguration configuration)
     {
         _environment = environment;
+        _customRoot = configuration["Registration:StoragePath"];
+        _publicBaseUrl = configuration["Registration:PublicBaseUrl"];
     }
 
     public async Task<StoredRegistrationDocument> SaveAsync(string fileName, Stream content, CancellationToken cancellationToken = default)
     {
-        var uploadsRoot = Path.Combine(_environment.ContentRootPath, "wwwroot", "uploads", "registrations");
+        var uploadsRoot = ResolveUploadsRoot();
         Directory.CreateDirectory(uploadsRoot);
 
         var sanitized = SanitizeFileName(fileName);
@@ -32,8 +37,40 @@ public class LocalRegistrationDocumentStorage : IRegistrationDocumentStorage
             await content.CopyToAsync(fileStream, cancellationToken);
         }
 
-        var relativeUrl = $"/uploads/registrations/{uniqueFileName}";
+        var relativeUrl = BuildRelativeUrl(uploadsRoot, uniqueFileName);
         return new StoredRegistrationDocument(uniqueFileName, relativeUrl);
+    }
+
+    private string ResolveUploadsRoot()
+    {
+        if (string.IsNullOrWhiteSpace(_customRoot))
+        {
+            return Path.Combine(_environment.ContentRootPath, "wwwroot", "uploads", "registrations");
+        }
+
+        return Path.IsPathRooted(_customRoot)
+            ? _customRoot
+            : Path.Combine(_environment.ContentRootPath, _customRoot);
+    }
+
+    private string BuildRelativeUrl(string uploadsRoot, string fileName)
+    {
+        if (!string.IsNullOrWhiteSpace(_publicBaseUrl))
+        {
+            return $"{_publicBaseUrl.TrimEnd('/')}/{fileName}";
+        }
+
+        var normalizedUploads = uploadsRoot.Replace('\\', '/');
+        var uploadsSegment = normalizedUploads.Contains("/wwwroot/")
+            ? normalizedUploads[(normalizedUploads.IndexOf("/wwwroot/", StringComparison.Ordinal) + "/wwwroot".Length)..]
+            : "/uploads/registrations";
+
+        if (!uploadsSegment.StartsWith('/'))
+        {
+            uploadsSegment = $"/{uploadsSegment}";
+        }
+
+        return $"{uploadsSegment.TrimEnd('/')}/{fileName}";
     }
 
     private static string SanitizeFileName(string fileName)

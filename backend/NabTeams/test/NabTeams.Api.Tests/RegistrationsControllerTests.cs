@@ -19,11 +19,13 @@ public class RegistrationsControllerTests
     private static RegistrationsController CreateController(
         Mock<IRegistrationRepository> repository,
         Mock<IRegistrationDocumentStorage>? storage = null,
-        Mock<IRegistrationWorkflowService>? workflow = null)
+        Mock<IRegistrationWorkflowService>? workflow = null,
+        Mock<IRegistrationSummaryBuilder>? summaryBuilder = null)
     {
         storage ??= new Mock<IRegistrationDocumentStorage>();
         workflow ??= new Mock<IRegistrationWorkflowService>();
-        return new RegistrationsController(repository.Object, storage.Object, workflow.Object);
+        summaryBuilder ??= new Mock<IRegistrationSummaryBuilder>();
+        return new RegistrationsController(repository.Object, storage.Object, workflow.Object, summaryBuilder.Object);
     }
 
     [Fact]
@@ -163,11 +165,12 @@ public class RegistrationsControllerTests
     }
 
     [Fact]
-    public async Task FinalizeParticipantAsync_ReturnsOk_WhenRepositoryUpdatesStatus()
+    public async Task FinalizeParticipantAsync_UsesExistingSummary_WhenAvailable()
     {
         var repository = new Mock<IRegistrationRepository>();
+        var summaryBuilder = new Mock<IRegistrationSummaryBuilder>(MockBehavior.Strict);
         var registrationId = Guid.NewGuid();
-        var finalized = new ParticipantRegistration
+        var existing = new ParticipantRegistration
         {
             Id = registrationId,
             HeadFirstName = "Arman",
@@ -179,23 +182,82 @@ public class RegistrationsControllerTests
             TeamName = "AI Builders",
             HasTeam = true,
             TeamCompleted = true,
-            Status = RegistrationStatus.Finalized,
-            FinalizedAt = DateTimeOffset.UtcNow,
+            Status = RegistrationStatus.Submitted,
+            SummaryFileUrl = "https://files.example.com/summary.txt",
             SubmittedAt = DateTimeOffset.UtcNow.AddDays(-2)
+        };
+        var finalized = existing with
+        {
+            Status = RegistrationStatus.Finalized,
+            FinalizedAt = DateTimeOffset.UtcNow
         };
 
         repository
-            .Setup(r => r.FinalizeParticipantAsync(registrationId, null, It.IsAny<CancellationToken>()))
+            .Setup(r => r.GetParticipantAsync(registrationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        repository
+            .Setup(r => r.FinalizeParticipantAsync(registrationId, existing.SummaryFileUrl, It.IsAny<CancellationToken>()))
             .ReturnsAsync(finalized);
 
-        var controller = CreateController(repository);
+        var controller = CreateController(repository, summaryBuilder: summaryBuilder);
 
         var result = await controller.FinalizeParticipantAsync(registrationId, null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var payload = Assert.IsType<RegistrationsController.ParticipantRegistrationResponse>(ok.Value);
-        Assert.Equal(RegistrationStatus.Finalized, payload.Status);
-        repository.Verify(r => r.FinalizeParticipantAsync(registrationId, null, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(existing.SummaryFileUrl, payload.SummaryFileUrl);
+        repository.Verify(r => r.FinalizeParticipantAsync(registrationId, existing.SummaryFileUrl, It.IsAny<CancellationToken>()), Times.Once);
+        summaryBuilder.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task FinalizeParticipantAsync_GeneratesSummary_WhenMissing()
+    {
+        var repository = new Mock<IRegistrationRepository>();
+        var summaryBuilder = new Mock<IRegistrationSummaryBuilder>();
+        var registrationId = Guid.NewGuid();
+        var existing = new ParticipantRegistration
+        {
+            Id = registrationId,
+            HeadFirstName = "Neda",
+            HeadLastName = "Moradi",
+            NationalId = "1111111111",
+            PhoneNumber = "09121112223",
+            EducationDegree = "Master",
+            FieldOfStudy = "AI",
+            TeamName = "Visionaries",
+            HasTeam = true,
+            TeamCompleted = true,
+            Status = RegistrationStatus.Submitted,
+            SubmittedAt = DateTimeOffset.UtcNow.AddDays(-1)
+        };
+        var generated = new StoredRegistrationDocument("visionaries-summary.txt", "https://files.example.com/visionaries-summary.txt");
+        var finalized = existing with
+        {
+            Status = RegistrationStatus.Finalized,
+            FinalizedAt = DateTimeOffset.UtcNow,
+            SummaryFileUrl = generated.FileUrl
+        };
+
+        repository
+            .Setup(r => r.GetParticipantAsync(registrationId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        summaryBuilder
+            .Setup(s => s.BuildSummaryAsync(existing, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(generated);
+        repository
+            .Setup(r => r.FinalizeParticipantAsync(registrationId, generated.FileUrl, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(finalized);
+
+        var controller = CreateController(repository, summaryBuilder: summaryBuilder);
+
+        var result = await controller.FinalizeParticipantAsync(registrationId, null, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<RegistrationsController.ParticipantRegistrationResponse>(ok.Value);
+        Assert.Equal(generated.FileUrl, payload.SummaryFileUrl);
+        summaryBuilder.Verify(s => s.BuildSummaryAsync(existing, It.IsAny<CancellationToken>()), Times.Once);
+        repository.Verify(r => r.FinalizeParticipantAsync(registrationId, generated.FileUrl, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

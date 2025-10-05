@@ -27,6 +27,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<RegistrationNotificationEntity> RegistrationNotifications => Set<RegistrationNotificationEntity>();
     public DbSet<BusinessPlanReviewEntity> BusinessPlanReviews => Set<BusinessPlanReviewEntity>();
     public DbSet<IntegrationSettingEntity> IntegrationSettings => Set<IntegrationSettingEntity>();
+    public DbSet<OperationsChecklistItemEntity> OperationsChecklistItems => Set<OperationsChecklistItemEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,6 +43,7 @@ public class ApplicationDbContext : DbContext
         var notificationChannelConverter = new EnumToStringConverter<NotificationChannel>();
         var businessPlanStatusConverter = new EnumToStringConverter<BusinessPlanReviewStatus>();
         var integrationProviderConverter = new EnumToStringConverter<IntegrationProviderType>();
+        var operationsStatusConverter = new EnumToStringConverter<OperationsChecklistStatus>();
 
         var stringListComparer = new ValueComparer<List<string>>(
             (left, right) => (left ?? new()).SequenceEqual(right ?? new()),
@@ -241,6 +243,22 @@ public class ApplicationDbContext : DbContext
             entity.HasIndex(e => e.Type)
                 .HasDatabaseName("IX_IntegrationSettings_Type_Active")
                 .HasFilter("\"IsActive\" = TRUE");
+        });
+
+        modelBuilder.Entity<OperationsChecklistItemEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(256).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1024).IsRequired();
+            entity.Property(e => e.Category).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Status).HasConversion(operationsStatusConverter).IsRequired();
+            entity.Property(e => e.Notes).HasMaxLength(1024);
+            entity.Property(e => e.ArtifactUrl).HasMaxLength(512);
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt).IsRequired();
+
+            entity.HasIndex(e => e.Key).IsUnique();
         });
 
         modelBuilder.Entity<JudgeRegistrationEntity>(entity =>

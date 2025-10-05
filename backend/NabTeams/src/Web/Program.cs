@@ -22,6 +22,7 @@ using Polly.Extensions.Http;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Common;
 using NabTeams.Application.Integrations;
+using NabTeams.Application.Operations;
 using NabTeams.Application.Registrations;
 using NabTeams.Infrastructure.HealthChecks;
 using NabTeams.Infrastructure.Monitoring;
@@ -180,13 +181,16 @@ builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
 builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
 builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
+builder.Services.AddScoped<IOperationsChecklistRepository, EfOperationsChecklistRepository>();
 builder.Services.AddScoped<IIntegrationSettingsRepository, EfIntegrationSettingsRepository>();
 builder.Services.AddScoped<IIntegrationSettingsService, IntegrationSettingsService>();
 builder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();
+builder.Services.AddSingleton<IRegistrationSummaryBuilder, RegistrationSummaryBuilder>();
 builder.Services.AddScoped<INotificationService, ExternalNotificationService>();
 builder.Services.AddScoped<IPaymentGateway>(sp => sp.GetRequiredService<IdPayPaymentGateway>());
 builder.Services.AddScoped<IBusinessPlanAnalyzer>(sp => sp.GetRequiredService<GeminiBusinessPlanAnalyzer>());
 builder.Services.AddScoped<IRegistrationWorkflowService, RegistrationWorkflowService>();
+builder.Services.AddScoped<IOperationsChecklistService, OperationsChecklistService>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
 builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();
@@ -249,6 +253,8 @@ if (!app.Environment.IsDevelopment())
 app.UseResponseCompression();
 app.UseSecurityHeaders();
 app.UseStaticFiles(registrationDocumentStaticFiles);
+
+app.UseStaticFiles();
 
 app.UseStaticFiles();
 

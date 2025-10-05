@@ -25,15 +25,18 @@ public class RegistrationsController : ControllerBase
     private readonly IRegistrationRepository _repository;
     private readonly IRegistrationDocumentStorage _documentStorage;
     private readonly IRegistrationWorkflowService _workflowService;
+    private readonly IRegistrationSummaryBuilder _summaryBuilder;
 
     public RegistrationsController(
         IRegistrationRepository repository,
         IRegistrationDocumentStorage documentStorage,
-        IRegistrationWorkflowService workflowService)
+        IRegistrationWorkflowService workflowService,
+        IRegistrationSummaryBuilder summaryBuilder)
     {
         _repository = repository;
         _documentStorage = documentStorage;
         _workflowService = workflowService;
+        _summaryBuilder = summaryBuilder;
     }
 
     [HttpPost("participants")]
@@ -186,7 +189,30 @@ public class RegistrationsController : ControllerBase
         [FromBody] ParticipantFinalizeRequest? request,
         CancellationToken cancellationToken)
     {
-        var stored = await _repository.FinalizeParticipantAsync(id, request?.SummaryFileUrl, cancellationToken);
+        var existing = await _repository.GetParticipantAsync(id, cancellationToken);
+        if (existing is null)
+        {
+            return NotFound();
+        }
+
+        if (existing.Status == RegistrationStatus.Finalized)
+        {
+            return Conflict(new { message = "این ثبت‌نام قبلاً نهایی شده است و قابل ویرایش نیست." });
+        }
+
+        var summaryUrl = request?.SummaryFileUrl;
+        if (string.IsNullOrWhiteSpace(summaryUrl))
+        {
+            summaryUrl = existing.SummaryFileUrl;
+        }
+
+        if (string.IsNullOrWhiteSpace(summaryUrl))
+        {
+            var generated = await _summaryBuilder.BuildSummaryAsync(existing, cancellationToken);
+            summaryUrl = generated.FileUrl;
+        }
+
+        var stored = await _repository.FinalizeParticipantAsync(id, summaryUrl, cancellationToken);
         if (stored is null)
         {
             return NotFound();
