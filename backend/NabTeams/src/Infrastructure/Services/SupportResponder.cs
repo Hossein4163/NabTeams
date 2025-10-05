@@ -178,7 +178,7 @@ public class SupportResponder : ISupportResponder
                 throw new InvalidOperationException("Gemini response missing text");
             }
 
-            var normalizedJson = Regex.Replace(text, @"(?<=[}\]\"]),(?=\s*[}\]])", string.Empty);
+            var normalizedJson = Regex.Replace(text, @"(?<=[}\]\]),(?=\s*[}\]])", string.Empty);
             var answer = JsonSerializer.Deserialize<SupportAnswer>(normalizedJson);
             if (answer is null)
             {

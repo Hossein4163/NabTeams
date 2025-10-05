@@ -369,6 +369,7 @@ public class MessageEntity
     public MessageStatus Status { get; set; }
     public List<string> ModerationTags { get; set; } = new();
     public string? ModerationNotes { get; set; }
+    public double ModerationRisk { get; set; }
     public int PenaltyPoints { get; set; }
 }
 
