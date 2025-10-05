@@ -6,9 +6,6 @@ public enum RegistrationDocumentCategory
     TeamResume,
     Presentation,
     BusinessModel,
-    BusinessPlan,
-    PitchDeck,
-    Resume,
     Other
 }
 
@@ -17,7 +14,6 @@ public enum RegistrationLinkType
     LinkedIn,
     GitHub,
     Website,
-    Instagram,
     Demo,
     Other
 }

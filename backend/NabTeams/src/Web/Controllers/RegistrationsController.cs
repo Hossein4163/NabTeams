@@ -9,7 +9,6 @@ using NabTeams.Application.Abstractions;
 using NabTeams.Application.Common;
 using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
-using NabTeams.Web.Configuration;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace NabTeams.Web.Controllers;

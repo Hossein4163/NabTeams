@@ -60,7 +60,7 @@ public class ExternalNotificationService : INotificationService
         };
     }
 
-    private async Task SendEmailAsync(NotificationRequest request, Application.Common.NotificationOptions.EmailOptions options, CancellationToken cancellationToken)
+    private async Task SendEmailAsync(NotificationRequest request, NotificationOptions.EmailOptions options, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(options.Host) || string.IsNullOrWhiteSpace(options.SenderAddress))
         {
@@ -86,7 +86,7 @@ public class ExternalNotificationService : INotificationService
         await smtpClient.SendMailAsync(message, cancellationToken);
     }
 
-    private async Task SendSmsAsync(NotificationRequest request, Application.Common.NotificationOptions.SmsOptions options, CancellationToken cancellationToken)
+    private async Task SendSmsAsync(NotificationRequest request, NotificationOptions.SmsOptions options, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(options.ApiKey))
         {

@@ -12,7 +12,7 @@ public static class DatabaseInitializer
 {
     public static async Task InitializeAsync(IServiceProvider services, CancellationToken cancellationToken = default)
     {
-        using var scope = services.CreateScope();
+        await using var scope = services.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         await context.Database.MigrateAsync(cancellationToken);
 
