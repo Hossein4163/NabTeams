@@ -9,6 +9,8 @@ import {
   ParticipantTeamMemberInput,
   RegistrationDocumentCategory,
   RegistrationLinkType,
+  fetchParticipantRegistration,
+  finalizeParticipantRegistration,
   submitParticipantRegistration
 } from '../../../lib/api';
 
@@ -64,6 +66,10 @@ function cleanupObjectUrl(url: string) {
   }
 }
 
+function releaseDocumentUrls(documents: DocumentDraft[]) {
+  documents.forEach((doc) => cleanupObjectUrl(doc.fileUrl));
+}
+
 function createInitialState(): ParticipantFormState {
   return {
     headFirstName: '',
@@ -90,12 +96,56 @@ function createInitialState(): ParticipantFormState {
   };
 }
 
+function mapRegistrationToFormState(
+  registration: ParticipantRegistrationResponse
+): ParticipantFormState {
+  const members = registration.members.map((member) => ({
+    fullName: member.fullName ?? '',
+    role: member.role ?? '',
+    focusArea: member.focusArea ?? ''
+  }));
+  const documents = registration.documents.map((doc) => ({
+    category: doc.category,
+    fileName: doc.fileName ?? '',
+    fileUrl: doc.fileUrl ?? ''
+  }));
+  const links = registration.links.map((link) => ({
+    type: link.type,
+    label: link.label ?? '',
+    url: link.url ?? ''
+  }));
+
+  const normalizedMembers =
+    members.length > 0 ? members : [{ fullName: '', role: '', focusArea: '' }];
+
+  return {
+    headFirstName: registration.headFirstName ?? '',
+    headLastName: registration.headLastName ?? '',
+    nationalId: registration.nationalId ?? '',
+    phoneNumber: registration.phoneNumber ?? '',
+    email: registration.email ?? '',
+    birthDate: registration.birthDate ?? '',
+    educationDegree: registration.educationDegree ?? '',
+    fieldOfStudy: registration.fieldOfStudy ?? '',
+    teamName: registration.teamName ?? '',
+    hasTeam: registration.hasTeam,
+    teamCompleted: registration.hasTeam ? registration.teamCompleted : false,
+    additionalNotes: registration.additionalNotes ?? '',
+    members: registration.hasTeam ? normalizedMembers : [{ fullName: '', role: '', focusArea: '' }],
+    documents,
+    links
+  };
+}
+
 export default function ParticipantRegistrationPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<ParticipantFormState>(() => createInitialState());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ParticipantRegistrationResponse | null>(null);
+  const [loadingExisting, setLoadingExisting] = useState(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const [statusAlert, setStatusAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const filteredMembers = useMemo(() => {
     if (!form.hasTeam) {
@@ -294,6 +344,7 @@ export default function ParticipantRegistrationPage() {
 
     setSubmitting(true);
     setError(null);
+    setStatusAlert(null);
 
     const payload: ParticipantRegistrationPayload = {
       headFirstName: form.headFirstName.trim(),
@@ -342,16 +393,77 @@ export default function ParticipantRegistrationPage() {
   }
 
   function handleReset() {
-    form.documents.forEach((doc) => cleanupObjectUrl(doc.fileUrl));
+    releaseDocumentUrls(form.documents);
     setForm(createInitialState());
     setResult(null);
     setError(null);
     setStep(0);
+    setStatusAlert(null);
+    setLoadingExisting(false);
+    setFinalizing(false);
+  }
+
+  async function handleEditRegistration() {
+    if (!result) {
+      return;
+    }
+    setLoadingExisting(true);
+    setStatusAlert(null);
+    try {
+      const registration = await fetchParticipantRegistration(result.id);
+      releaseDocumentUrls(form.documents);
+      setForm(mapRegistrationToFormState(registration));
+      setResult(null);
+      setError(null);
+      setStep(0);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'بارگذاری مجدد اطلاعات با خطا مواجه شد.';
+      setStatusAlert({ type: 'error', message });
+    } finally {
+      setLoadingExisting(false);
+    }
+  }
+
+  async function handleFinalize() {
+    if (!result) {
+      return;
+    }
+    setFinalizing(true);
+    setStatusAlert(null);
+    try {
+      const response = await finalizeParticipantRegistration(result.id);
+      setResult(response);
+      setStatusAlert({ type: 'success', message: 'ثبت‌نام شما با موفقیت نهایی شد.' });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'نهایی‌سازی ثبت‌نام امکان‌پذیر نبود. لطفاً با استفاده از گزینه ویرایش، اطلاعات را بازبینی کنید.';
+      setStatusAlert({
+        type: 'error',
+        message
+      });
+    } finally {
+      setFinalizing(false);
+    }
   }
 
   if (result) {
+    const finalizeDate = result.finalizedAt ? new Date(result.finalizedAt).toLocaleString('fa-IR') : null;
+    const isFinalized = Boolean(finalizeDate);
     return (
       <div className="space-y-6">
+        {statusAlert && (
+          <div
+            className={`rounded-lg border p-3 text-sm ${
+              statusAlert.type === 'success'
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
+                : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+            }`}
+          >
+            {statusAlert.message}
+          </div>
+        )}
         <div className="rounded-xl border border-emerald-600/50 bg-emerald-500/10 p-6">
           <h2 className="text-2xl font-semibold text-emerald-300">ثبت‌نام با موفقیت انجام شد</h2>
           <p className="mt-3 text-sm text-emerald-100/90">
@@ -378,6 +490,10 @@ export default function ParticipantRegistrationPage() {
             <div>
               <dt className="text-slate-400">وضعیت تکمیل تیم</dt>
               <dd>{result.teamCompleted ? 'تیم تکمیل است' : 'در حال تکمیل'}</dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">وضعیت نهایی‌سازی</dt>
+              <dd>{isFinalized ? `نهایی شده در ${finalizeDate}` : 'در انتظار تأیید نهایی'}</dd>
             </div>
           </dl>
           {result.members.length > 0 && (
@@ -413,20 +529,39 @@ export default function ParticipantRegistrationPage() {
               <ul className="mt-2 space-y-2 text-sm text-emerald-200">
                 {result.links.map((link) => (
                   <li key={link.id} className="truncate">
-                    <span className="text-slate-400">[{link.type}]</span> {link.label ?? link.url}
+                    <span className="text-slate-400">[{link.type}]</span>{' '}
+                    {link.label && link.label.trim() ? link.label : link.url}
                   </li>
                 ))}
               </ul>
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleReset}
-          className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
-        >
-          ثبت‌نام جدید
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleReset}
+            className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
+          >
+            ثبت‌نام جدید
+          </button>
+          <button
+            type="button"
+            onClick={handleEditRegistration}
+            disabled={loadingExisting || finalizing}
+            className="inline-flex items-center justify-center rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+          >
+            {loadingExisting ? 'در حال بارگذاری...' : 'ویرایش ثبت‌نام'}
+          </button>
+          <button
+            type="button"
+            onClick={handleFinalize}
+            disabled={finalizing || loadingExisting || isFinalized}
+            className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
+          >
+            {isFinalized ? 'ثبت‌نام نهایی شده است' : finalizing ? 'در حال نهایی‌سازی...' : 'تأیید نهایی'}
+          </button>
+        </div>
       </div>
     );
   }
