@@ -6,31 +6,31 @@
 
 ```
 backend/
-  src/Domain/            # لایه دامنه (Entities، Value Objects)
-  src/Application/       # لایه کاربرد (Contracts، DTOها، سیاست‌ها)
-  src/Infrastructure/    # پیاده‌سازی زیرساخت (EF Core، Gemini، Health Checks)
-  src/Web/               # هاست ASP.NET Core (Program، Controllers، SignalR)
-  NabTeams.Api.Tests/    # تست‌های واحد بک‌اند
+  NabTeams/src/Domain/            # لایه دامنه (Entities، Value Objects)
+  NabTeams/src/Application/       # لایه کاربرد (Contracts، DTOها، سیاست‌ها)
+  NabTeams/src/Infrastructure/    # پیاده‌سازی زیرساخت (EF Core، Gemini، Health Checks)
+  NabTeams/src/Web/               # هاست ASP.NET Core (Program، Controllers، SignalR)
+  NabTeams/test/NabTeams.Api.Tests/    # تست‌های واحد بک‌اند
 frontend/                # اپ Next.js (App Router + NextAuth)
 implementation_plan.md   # سند تحلیل و طراحی اولیه
 ```
 
 ## متغیرهای محیطی کلیدی
 
-| نام | محل استفاده | توضیح |
-| --- | --- | --- |
-| `ConnectionStrings__DefaultConnection` | بک‌اند | رشته اتصال PostgreSQL (پیش‌فرض: `Host=localhost;Port=5432;Database=nabteams;Username=nabteams;Password=nabteams`) |
-| `Gemini__ApiKey` | بک‌اند | کلید دسترسی Google Gemini. در صورت خالی بودن، سرویس‌ها به حالت Rule-based برمی‌گردند. |
-| `Gemini__ModerationModel`, `Gemini__RagModel` | بک‌اند | نام مدل برای Moderation/RAG. پیش‌فرض: `gemini-1.5-pro`. |
-| `Authentication__Authority` | بک‌اند | آدرس سرور SSO/OIDC. |
-| `Authentication__Audience` | بک‌اند | Audience توکن JWT. |
-| `Authentication__AdminRole` | بک‌اند | نام نقش ادمین (پیش‌فرض `admin`). |
-| `Authentication__Disabled` | بک‌اند | اگر `true` باشد، احراز هویت غیرفعال می‌شود (برای توسعه محلی). |
-| `NEXTAUTH_URL` | فرانت‌اند | آدرس پابلیک اپ Next.js (مثلاً `http://localhost:3000`). |
-| `NEXTAUTH_SECRET` | فرانت‌اند | کلید رمزنگاری سشن NextAuth. |
-| `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_SCOPE` | فرانت‌اند | تنظیمات ارائه‌دهنده OIDC برای NextAuth. اگر مقداردهی نشود و `AUTH_ALLOW_DEV=true` باشد، ورود آزمایشی فعال می‌شود. |
-| `AUTH_ALLOW_DEV` | فرانت‌اند | در صورت `true` (پیش‌فرض)، Provider ورود آزمایشی (Credentials) فعال می‌شود. |
-| `NEXT_PUBLIC_API_URL` | فرانت‌اند | آدرس سرویس بک‌اند (پیش‌فرض `http://localhost:5000`). |
+| نام                                                             | محل استفاده | توضیح                                                                                                             |
+| --------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `ConnectionStrings__DefaultConnection`                          | بک‌اند      | رشته اتصال PostgreSQL (پیش‌فرض: `Host=localhost;Port=5432;Database=nabteams;Username=nabteams;Password=nabteams`) |
+| `Gemini__ApiKey`                                                | بک‌اند      | کلید دسترسی Google Gemini. در صورت خالی بودن، سرویس‌ها به حالت Rule-based برمی‌گردند.                             |
+| `Gemini__ModerationModel`, `Gemini__RagModel`                   | بک‌اند      | نام مدل برای Moderation/RAG. پیش‌فرض: `gemini-1.5-pro`.                                                           |
+| `Authentication__Authority`                                     | بک‌اند      | آدرس سرور SSO/OIDC.                                                                                               |
+| `Authentication__Audience`                                      | بک‌اند      | Audience توکن JWT.                                                                                                |
+| `Authentication__AdminRole`                                     | بک‌اند      | نام نقش ادمین (پیش‌فرض `admin`).                                                                                  |
+| `Authentication__Disabled`                                      | بک‌اند      | اگر `true` باشد، احراز هویت غیرفعال می‌شود (برای توسعه محلی).                                                     |
+| `NEXTAUTH_URL`                                                  | فرانت‌اند   | آدرس پابلیک اپ Next.js (مثلاً `http://localhost:3000`).                                                           |
+| `NEXTAUTH_SECRET`                                               | فرانت‌اند   | کلید رمزنگاری سشن NextAuth.                                                                                       |
+| `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_SCOPE` | فرانت‌اند   | تنظیمات ارائه‌دهنده OIDC برای NextAuth. اگر مقداردهی نشود و `AUTH_ALLOW_DEV=true` باشد، ورود آزمایشی فعال می‌شود. |
+| `AUTH_ALLOW_DEV`                                                | فرانت‌اند   | در صورت `true` (پیش‌فرض)، Provider ورود آزمایشی (Credentials) فعال می‌شود.                                        |
+| `NEXT_PUBLIC_API_URL`                                           | فرانت‌اند   | آدرس سرویس بک‌اند (پیش‌فرض `http://localhost:5000`).                                                              |
 
 ## راه‌اندازی بک‌اند
 
