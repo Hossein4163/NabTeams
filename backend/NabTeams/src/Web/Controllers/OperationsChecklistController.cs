@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using NabTeams.Application.Abstractions;
@@ -20,11 +23,16 @@ public class OperationsChecklistController : ControllerBase
 {
     private readonly IOperationsChecklistService _service;
     private readonly IAuditLogService _auditLogService;
+    private readonly IOperationsArtifactStorage _artifactStorage;
 
-    public OperationsChecklistController(IOperationsChecklistService service, IAuditLogService auditLogService)
+    public OperationsChecklistController(
+        IOperationsChecklistService service,
+        IAuditLogService auditLogService,
+        IOperationsArtifactStorage artifactStorage)
     {
         _service = service;
         _auditLogService = auditLogService;
+        _artifactStorage = artifactStorage;
     }
 
     [HttpGet]
@@ -33,6 +41,57 @@ public class OperationsChecklistController : ControllerBase
     {
         var items = await _service.ListAsync(cancellationToken);
         return Ok(items.Select(OperationsChecklistItemResponse.FromModel));
+    }
+
+    [HttpPost("{id:guid}/artifact")]
+    [RequestFormLimits(MultipartBodyLengthLimit = 20 * 1024 * 1024)]
+    [SwaggerOperation(
+        Summary = "آپلود مستند برای آیتم عملیات",
+        Description = "گزارش یا فایل تکمیلی مرتبط با آیتم را بارگذاری می‌کند و لینک آن را در چک‌لیست ذخیره می‌سازد.")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<OperationsChecklistItemResponse>> UploadArtifactAsync(
+        Guid id,
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest("فایل معتبری ارسال نشده است.");
+        }
+
+        OperationsChecklistItemModel item;
+        try
+        {
+            item = await _service.GetAsync(id, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            return NotFound();
+        }
+
+        await using var stream = file.OpenReadStream();
+        var stored = await _artifactStorage.SaveAsync(item.Key, file.FileName, stream, cancellationToken);
+
+        var updated = await _service.UpdateAsync(
+            id,
+            new OperationsChecklistUpdateModel(item.Status, item.Notes, stored.FileUrl),
+            cancellationToken);
+
+        var (actorId, actorName) = ResolveActor();
+        await _auditLogService.LogAsync(
+            actorId,
+            actorName,
+            "OperationsChecklist.UploadArtifact",
+            nameof(OperationsChecklistItemEntity),
+            updated.Id.ToString(),
+            new
+            {
+                updated.ArtifactUrl,
+                file.FileName
+            },
+            cancellationToken);
+
+        return Ok(OperationsChecklistItemResponse.FromModel(updated));
     }
 
     [HttpPut("{id:guid}")]

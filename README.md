@@ -36,6 +36,8 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 | `Notification__Sms__ApiKey`, `Notification__Sms__BaseUrl`, `Notification__Sms__SenderNumber` | بک‌اند | تنظیمات Gateway پیامک (پیش‌فرض برای Kavenegar).                                                                    |
 | `Registration__StoragePath`                                    | بک‌اند      | مسیر سفارشی ذخیره‌سازی مدارک (نسبی به ریشه اپ یا مطلق).                                                             |
 | `Registration__PublicBaseUrl`                                  | بک‌اند      | آدرس پابلیک فایل‌های آپلود شده در صورت استفاده از فضای خارج از `wwwroot`.                                         |
+| `Operations__ArtifactsPath`                                    | بک‌اند      | مسیر ذخیره‌سازی مستندات عملیات (پیش‌فرض: `wwwroot/uploads/operations`).                                            |
+| `Operations__ArtifactsPublicBaseUrl`                           | بک‌اند      | آدرس پابلیک مستندات عملیات هنگام استفاده از فضای ذخیره‌سازی خارجی/CDN.                                           |
 | `INTEGRATIONS__GEMINI`                                          | بک‌اند      | JSON شامل `providerKey`, `displayName`, `configuration` و `isActive` برای ثبت خودکار تنظیمات Gemini در پایگاه‌داده. |
 | `INTEGRATIONS__PAYMENT_IDPAY`                                   | بک‌اند      | JSON تنظیمات درگاه پرداخت (IdPay یا سازگار) برای درج و فعال‌سازی خودکار.                                           |
 | `INTEGRATIONS__EMAIL_SMTP`                                      | بک‌اند      | JSON حاوی تنظیمات SMTP (هاست، پورت، کاربر، رمز و ...).                                                              |
@@ -49,6 +51,20 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 | `FileStorage__PublicBaseUrl`                                    | بک‌اند      | آدرس پایه قابل‌دسترسی برای فایل‌های آپلود شده (مثلاً `/uploads` یا URL کامل CDN).                                 |
 
 > **نکته:** پس از ورود به سیستم با نقش ادمین، می‌توانید مقادیر مربوط به Gemini، درگاه پرداخت، SMTP و پنل پیامکی را از مسیر `/dashboard/admin/integrations` وارد یا ویرایش کنید؛ در این صورت مقادیر جدول بالا به‌عنوان مقدار پیش‌فرض عمل کرده و در زمان اجرا با داده‌های پایگاه‌داده جایگزین می‌شوند.
+
+> **نکته:** پس از ورود به سیستم با نقش ادمین، می‌توانید مقادیر مربوط به Gemini، درگاه پرداخت، SMTP و پنل پیامکی را از مسیر `/dashboard/admin/integrations` وارد یا ویرایش کنید؛ در این صورت مقادیر جدول بالا به‌عنوان مقدار پیش‌فرض عمل کرده و در زمان اجرا با داده‌های پایگاه‌داده جایگزین می‌شوند. همچنین می‌توانید وضعیت اجرای چک‌لیست امنیت/عملیات را از مسیر `/dashboard/admin/operations` به‌روزرسانی و مستند کنید تا پیش‌نیازهای انتشار دنبال شود. در محیط‌های تولیدی می‌توان مقدار JSON هر سرویس را در متغیرهای `INTEGRATIONS__*` قرار داد تا هنگام راه‌اندازی به صورت خودکار در پایگاه‌داده ذخیره و فعال شود؛ مثال برای Gemini:
+> ```json
+> {
+>   "providerKey": "gemini",
+>   "displayName": "Google Gemini Production",
+>   "configuration": {
+>     "ApiKey": "prod-key",
+>     "BaseUrl": "https://generativelanguage.googleapis.com",
+>     "BusinessPlanModel": "gemini-1.5-pro"
+>   },
+>   "isActive": true
+> }
+> ```
 
 > **نکته:** پس از ورود به سیستم با نقش ادمین، می‌توانید مقادیر مربوط به Gemini، درگاه پرداخت، SMTP و پنل پیامکی را از مسیر `/dashboard/admin/integrations` وارد یا ویرایش کنید؛ در این صورت مقادیر جدول بالا به‌عنوان مقدار پیش‌فرض عمل کرده و در زمان اجرا با داده‌های پایگاه‌داده جایگزین می‌شوند. همچنین می‌توانید وضعیت اجرای چک‌لیست امنیت/عملیات را از مسیر `/dashboard/admin/operations` به‌روزرسانی و مستند کنید تا پیش‌نیازهای انتشار دنبال شود. در محیط‌های تولیدی می‌توان مقدار JSON هر سرویس را در متغیرهای `INTEGRATIONS__*` قرار داد تا هنگام راه‌اندازی به صورت خودکار در پایگاه‌داده ذخیره و فعال شود؛ مثال برای Gemini:
 > ```json
@@ -115,6 +131,7 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 - `GET/POST/DELETE /api/knowledge-base` — مدیریت منابع دانش توسط ادمین.
 - `GET /api/moderation/{role}/logs` — مشاهده لاگ‌های پایش (ادمین).
 - `GET /api/admin/operations-checklist` و `PUT /api/admin/operations-checklist/{id}` — مشاهده و بروزرسانی وضعیت چک‌لیست امنیت و عملیات.
+- `POST /api/admin/operations-checklist/{id}/artifact` — بارگذاری فایل مستند (گزارش امنیت، تست بار، سیاست حریم خصوصی و ...) برای هر آیتم چک‌لیست.
 - `GET /health/live` — بررسی زنده بودن سرویس (بدون وابستگی به زیرساخت).
 - `GET /health/ready` — بررسی آمادگی شامل اتصال پایگاه‌داده و دسترسی به Gemini.
 

@@ -1,13 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
   listOperationsChecklist,
   OperationsChecklistItem,
   OperationsChecklistStatus,
-  updateOperationsChecklistItem
+  updateOperationsChecklistItem,
+  uploadOperationsChecklistArtifact
 } from '../../../../lib/api';
 
 const statusOptions: Array<{ value: OperationsChecklistStatus; label: string }> = [
@@ -48,6 +49,7 @@ export default function OperationsChecklistPage() {
   const [forms, setForms] = useState<FormState>({});
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -93,7 +95,7 @@ export default function OperationsChecklistPage() {
     }));
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>, item: OperationsChecklistItem) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>, item: OperationsChecklistItem) => {
     event.preventDefault();
     const form = forms[item.id];
     if (!form) {
@@ -128,6 +130,38 @@ export default function OperationsChecklistPage() {
       setError((err as Error).message);
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const handleArtifactChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+    item: OperationsChecklistItem
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) {
+      return;
+    }
+
+    setUploadingId(item.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const updated = await uploadOperationsChecklistArtifact(item.id, file, auth);
+      setItems((prev) => prev.map((existing) => (existing.id === updated.id ? updated : existing)));
+      setForms((prev) => ({
+        ...prev,
+        [item.id]: {
+          status: updated.status,
+          notes: updated.notes ?? '',
+          artifactUrl: updated.artifactUrl ?? ''
+        }
+      }));
+      setSuccess('فایل مستند با موفقیت بارگذاری شد.');
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setUploadingId(null);
     }
   };
 
@@ -171,6 +205,7 @@ export default function OperationsChecklistPage() {
         ) : (
           items.map((item) => {
             const form = forms[item.id] ?? { status: item.status, notes: item.notes ?? '', artifactUrl: item.artifactUrl ?? '' };
+            const isUploading = uploadingId === item.id;
             return (
               <form
                 key={item.id}
@@ -187,6 +222,40 @@ export default function OperationsChecklistPage() {
                     )}
                   </div>
                   <div className="flex w-full max-w-md flex-col gap-3">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-medium text-slate-200" htmlFor={`artifact-${item.id}`}>
+                        مستندات پشتیبان
+                      </label>
+                      <input
+                        id={`artifact-${item.id}`}
+                        type="file"
+                        className="hidden"
+                        onChange={(event) => void handleArtifactChange(event, item)}
+                      />
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label
+                          htmlFor={`artifact-${item.id}`}
+                          className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-xs font-medium transition hover:border-slate-400 hover:text-white ${
+                            isUploading ? 'pointer-events-none opacity-60' : 'text-slate-200'
+                          }`}
+                        >
+                          {isUploading ? 'در حال آپلود ...' : item.artifactUrl ? 'بارگذاری مجدد مستند' : 'بارگذاری مستند'}
+                        </label>
+                        {item.artifactUrl && (
+                          <a
+                            href={item.artifactUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-emerald-300 hover:text-emerald-200"
+                          >
+                            مشاهده فایل
+                          </a>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        فرمت‌های متداول (PDF، ZIP، تصویر، متن) پشتیبانی می‌شوند. حداکثر اندازهٔ هر فایل ۲۰ مگابایت است.
+                      </p>
+                    </div>
                     <label className="text-xs font-medium text-slate-200" htmlFor={`status-${item.id}`}>
                       وضعیت
                     </label>

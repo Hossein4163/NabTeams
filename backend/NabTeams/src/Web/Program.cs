@@ -188,6 +188,7 @@ builder.Services.AddScoped<IOperationsChecklistRepository, EfOperationsChecklist
 builder.Services.AddScoped<IIntegrationSettingsRepository, EfIntegrationSettingsRepository>();
 builder.Services.AddScoped<IIntegrationSettingsService, IntegrationSettingsService>();
 builder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();
+builder.Services.AddSingleton<IOperationsArtifactStorage, LocalOperationsArtifactStorage>();
 builder.Services.AddSingleton<IRegistrationSummaryBuilder, RegistrationSummaryBuilder>();
 builder.Services.AddScoped<INotificationService, ExternalNotificationService>();
 builder.Services.AddScoped<IPaymentGateway>(sp => sp.GetRequiredService<IdPayPaymentGateway>());
@@ -256,6 +257,8 @@ if (!app.Environment.IsDevelopment())
 app.UseResponseCompression();
 app.UseSecurityHeaders();
 app.UseStaticFiles(registrationDocumentStaticFiles);
+
+app.UseStaticFiles();
 
 app.UseStaticFiles();
 

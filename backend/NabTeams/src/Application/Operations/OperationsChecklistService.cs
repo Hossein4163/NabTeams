@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Operations.Models;
 using NabTeams.Domain.Entities;
@@ -20,6 +22,17 @@ public class OperationsChecklistService : IOperationsChecklistService
     {
         var items = await _repository.ListAsync(cancellationToken);
         return items.Select(Map).OrderBy(item => item.Category).ThenBy(item => item.Title).ToList();
+    }
+
+    public async Task<OperationsChecklistItemModel> GetAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _repository.GetAsync(id, cancellationToken);
+        if (entity is null)
+        {
+            throw new InvalidOperationException($"Checklist item '{id}' not found.");
+        }
+
+        return Map(entity);
     }
 
     public async Task<OperationsChecklistItemModel> UpdateAsync(Guid id, OperationsChecklistUpdateModel update, CancellationToken cancellationToken = default)

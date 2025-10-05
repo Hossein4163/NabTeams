@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,7 +20,8 @@ public class OperationsChecklistControllerTests
 {
     private static OperationsChecklistController CreateController(
         Mock<IOperationsChecklistService> service,
-        Mock<IAuditLogService>? auditLog = null)
+        Mock<IAuditLogService>? auditLog = null,
+        Mock<IOperationsArtifactStorage>? artifactStorage = null)
     {
         auditLog ??= new Mock<IAuditLogService>();
         auditLog.Setup(a => a.LogAsync(
@@ -41,7 +43,9 @@ public class OperationsChecklistControllerTests
                 CreatedAt = DateTimeOffset.UtcNow
             });
 
-        return new OperationsChecklistController(service.Object, auditLog.Object)
+        artifactStorage ??= new Mock<IOperationsArtifactStorage>();
+
+        return new OperationsChecklistController(service.Object, auditLog.Object, artifactStorage.Object)
         {
             ControllerContext = new ControllerContext
             {
@@ -170,6 +174,82 @@ public class OperationsChecklistControllerTests
             nameof(OperationsChecklistItemEntity),
             itemId.ToString(),
             It.IsAny<object?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UploadArtifactAsync_ReturnsBadRequest_WhenFileMissing()
+    {
+        var service = new Mock<IOperationsChecklistService>();
+        var controller = CreateController(service);
+
+        var result = await controller.UploadArtifactAsync(Guid.NewGuid(), null, CancellationToken.None);
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        Assert.Contains("فایل", badRequest.Value?.ToString());
+    }
+
+    [Fact]
+    public async Task UploadArtifactAsync_ReturnsNotFound_WhenItemMissing()
+    {
+        var service = new Mock<IOperationsChecklistService>();
+        service.Setup(s => s.GetAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("missing"));
+
+        var controller = CreateController(service);
+        var file = new FormFile(Stream.Null, 0, 0, "file", "report.txt");
+
+        var result = await controller.UploadArtifactAsync(Guid.NewGuid(), file, CancellationToken.None);
+
+        Assert.IsType<NotFoundResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task UploadArtifactAsync_SavesFileAndUpdatesItem()
+    {
+        var service = new Mock<IOperationsChecklistService>();
+        var auditLog = new Mock<IAuditLogService>();
+        var storage = new Mock<IOperationsArtifactStorage>();
+        var id = Guid.NewGuid();
+        var model = new OperationsChecklistItemModel(
+            id,
+            "security-scan",
+            "اسکن امنیتی",
+            "اجرای ZAP",
+            "امنیت",
+            OperationsChecklistStatus.InProgress,
+            null,
+            null,
+            null,
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddHours(-2));
+
+        var updatedModel = model with { ArtifactUrl = "/uploads/operations/security-scan/report.txt" };
+
+        service.Setup(s => s.GetAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(model);
+        service.Setup(s => s.UpdateAsync(id, It.IsAny<OperationsChecklistUpdateModel>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(updatedModel);
+        storage.Setup(s => s.SaveAsync(
+                model.Key,
+                It.IsAny<string>(),
+                It.IsAny<Stream>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StoredOperationsArtifact("report.txt", "/uploads/operations/security-scan/report.txt"));
+
+        var controller = CreateController(service, auditLog, storage);
+        var buffer = new MemoryStream(new byte[] { 1, 2, 3 });
+        var file = new FormFile(buffer, 0, buffer.Length, "file", "report.txt");
+
+        var result = await controller.UploadArtifactAsync(id, file, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var payload = Assert.IsType<OperationsChecklistController.OperationsChecklistItemResponse>(ok.Value);
+        Assert.Equal(updatedModel.ArtifactUrl, payload.ArtifactUrl);
+
+        storage.Verify(s => s.SaveAsync(model.Key, "report.txt", It.IsAny<Stream>(), It.IsAny<CancellationToken>()), Times.Once);
+        service.Verify(s => s.UpdateAsync(
+            id,
+            It.Is<OperationsChecklistUpdateModel>(m => m.ArtifactUrl == updatedModel.ArtifactUrl && m.Status == model.Status),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 }

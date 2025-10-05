@@ -533,6 +533,33 @@ export async function updateOperationsChecklistItem(
   });
 }
 
+export async function uploadOperationsChecklistArtifact(
+  id: string,
+  file: File,
+  auth?: AuthContext
+): Promise<OperationsChecklistItem> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const headers = new Headers();
+  applyAuthHeaders(headers, auth);
+  headers.delete('Content-Type');
+
+  const response = await fetch(`${API_BASE}/api/admin/operations-checklist/${id}/artifact`, {
+    method: 'POST',
+    headers,
+    body: formData,
+    cache: 'no-store'
+  });
+
+  if (!response.ok) {
+    const body = await safeReadJson(response);
+    throw new Error((body as any)?.message ?? 'آپلود فایل با خطا مواجه شد');
+  }
+
+  return (await response.json()) as OperationsChecklistItem;
+}
+
 export interface ParticipantPaymentCompletionRequest {
   gatewayReference?: string | null;
 }
