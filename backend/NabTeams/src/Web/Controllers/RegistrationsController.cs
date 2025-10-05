@@ -1,14 +1,12 @@
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.IO;
 using System.Linq;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Common;
 using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace NabTeams.Web.Controllers;
 
@@ -20,39 +18,19 @@ public class RegistrationsController : ControllerBase
     private const int MaxDocuments = 10;
     private const int MaxLinks = 10;
     private const int MaxInterestAreas = 12;
-    private const long MaxDocumentSizeBytes = 25 * 1024 * 1024;
-
-    private static readonly HashSet<string> AllowedDocumentExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".pdf",
-        ".zip",
-        ".ppt",
-        ".pptx",
-        ".doc",
-        ".docx",
-        ".xls",
-        ".xlsx",
-        ".png",
-        ".jpg",
-        ".jpeg"
-    };
-
-    private static readonly string AllowedDocumentExtensionsDisplay = string.Join(
-        "، ",
-        AllowedDocumentExtensions.Select(ext => ext.TrimStart('.')));
 
     private readonly IRegistrationRepository _repository;
-    private readonly IFileStorageService _fileStorage;
 
-    public RegistrationsController(IRegistrationRepository repository, IFileStorageService fileStorage)
+    public RegistrationsController(IRegistrationRepository repository)
     {
         _repository = repository;
-        _fileStorage = fileStorage;
     }
 
     [HttpPost("participants")]
     [AllowAnonymous]
+    [SwaggerOperation(Summary = "ثبت‌نام سرپرست تیم و اعضا", Description = "درخواست اولیهٔ شرکت‌کننده را به همراه اعضای تیم، مدارک و لینک‌ها ثبت می‌کند.")]
     [ProducesResponseType(typeof(ParticipantRegistrationResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ParticipantRegistrationResponse>> CreateParticipantAsync(
         [FromBody] ParticipantRegistrationRequest request,
         CancellationToken cancellationToken)
@@ -84,69 +62,9 @@ public class RegistrationsController : ControllerBase
         return CreatedAtAction(nameof(GetParticipantAsync), new { id = response.Id }, response);
     }
 
-    [HttpPost("participants/uploads")]
-    [AllowAnonymous]
-    [RequestSizeLimit(MaxDocumentSizeBytes)]
-    [RequestFormLimits(MultipartBodyLengthLimit = MaxDocumentSizeBytes)]
-    [ProducesResponseType(typeof(ParticipantDocumentUploadResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ParticipantDocumentUploadResponse>> UploadParticipantDocumentAsync(
-        [FromForm] ParticipantDocumentUploadRequest request,
-        CancellationToken cancellationToken)
-    {
-        if (request.File is null)
-        {
-            ModelState.AddModelError(nameof(request.File), "فایل انتخاب نشده است.");
-            return ValidationProblem(ModelState);
-        }
-
-        if (request.File.Length == 0)
-        {
-            ModelState.AddModelError(nameof(request.File), "فایل انتخاب شده خالی است.");
-            return ValidationProblem(ModelState);
-        }
-
-        if (request.File.Length > MaxDocumentSizeBytes)
-        {
-            ModelState.AddModelError(
-                nameof(request.File),
-                $"حجم فایل نباید بیش از {MaxDocumentSizeBytes / (1024 * 1024)} مگابایت باشد.");
-            return ValidationProblem(ModelState);
-        }
-
-        var extension = Path.GetExtension(request.File.FileName);
-        if (string.IsNullOrWhiteSpace(extension) || !AllowedDocumentExtensions.Contains(extension))
-        {
-            ModelState.AddModelError(
-                nameof(request.File),
-                $"فرمت فایل پشتیبانی نمی‌شود. فرمت‌های مجاز: {AllowedDocumentExtensionsDisplay}.");
-            return ValidationProblem(ModelState);
-        }
-
-        var contentType = string.IsNullOrWhiteSpace(request.File.ContentType)
-            ? "application/octet-stream"
-            : request.File.ContentType;
-
-        await using var stream = request.File.OpenReadStream();
-        var stored = await _fileStorage.SaveAsync(
-            stream,
-            request.File.FileName,
-            contentType,
-            request.File.Length,
-            cancellationToken);
-
-        var response = new ParticipantDocumentUploadResponse
-        {
-            FileName = stored.OriginalFileName,
-            FileUrl = stored.FileUrl,
-            ContentType = stored.ContentType,
-            Size = stored.Length
-        };
-
-        return Ok(response);
-    }
-
     [HttpGet("participants")]
     [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [SwaggerOperation(Summary = "فهرست ثبت‌نام شرکت‌کنندگان", Description = "خلاصهٔ درخواست‌های ارسال‌شده توسط شرکت‌کنندگان را برای کاربر ادمین بازمی‌گرداند.")]
     [ProducesResponseType(typeof(IReadOnlyCollection<ParticipantRegistrationSummaryResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyCollection<ParticipantRegistrationSummaryResponse>>> ListParticipantsAsync(CancellationToken cancellationToken)
     {
@@ -160,6 +78,7 @@ public class RegistrationsController : ControllerBase
 
     [HttpGet("participants/{id:guid}")]
     [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [SwaggerOperation(Summary = "جزئیات ثبت‌نام شرکت‌کننده", Description = "اطلاعات کامل یک ثبت‌نام شرکت‌کننده را با شناسهٔ آن بازمی‌گرداند.")]
     [ProducesResponseType(typeof(ParticipantRegistrationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ParticipantRegistrationResponse>> GetParticipantAsync(Guid id, CancellationToken cancellationToken)
@@ -175,7 +94,9 @@ public class RegistrationsController : ControllerBase
 
     [HttpPost("judges")]
     [AllowAnonymous]
+    [SwaggerOperation(Summary = "ثبت‌نام داور", Description = "اطلاعات هویتی و تخصصی داور را ثبت می‌کند.")]
     [ProducesResponseType(typeof(JudgeRegistrationResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<JudgeRegistrationResponse>> CreateJudgeAsync([FromBody] JudgeRegistrationRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
@@ -191,6 +112,7 @@ public class RegistrationsController : ControllerBase
 
     [HttpGet("judges")]
     [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [SwaggerOperation(Summary = "فهرست ثبت‌نام داوران", Description = "تمامی درخواست‌های داوری ثبت‌شده را برای ادمین بازمی‌گرداند.")]
     [ProducesResponseType(typeof(IReadOnlyCollection<JudgeRegistrationResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyCollection<JudgeRegistrationResponse>>> ListJudgesAsync(CancellationToken cancellationToken)
     {
@@ -204,6 +126,7 @@ public class RegistrationsController : ControllerBase
 
     [HttpGet("judges/{id:guid}")]
     [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [SwaggerOperation(Summary = "جزئیات ثبت‌نام داور", Description = "اطلاعات کامل یک داور ثبت‌نام‌شده را برمی‌گرداند.")]
     [ProducesResponseType(typeof(JudgeRegistrationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<JudgeRegistrationResponse>> GetJudgeAsync(Guid id, CancellationToken cancellationToken)
@@ -219,7 +142,9 @@ public class RegistrationsController : ControllerBase
 
     [HttpPost("investors")]
     [AllowAnonymous]
+    [SwaggerOperation(Summary = "ثبت‌نام سرمایه‌گذار", Description = "ورود اطلاعات هویتی سرمایه‌گذار و حوزه‌های علاقه‌مندی برای سرمایه‌گذاری.")]
     [ProducesResponseType(typeof(InvestorRegistrationResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<InvestorRegistrationResponse>> CreateInvestorAsync([FromBody] InvestorRegistrationRequest request, CancellationToken cancellationToken)
     {
         if (request.InterestAreas.Count > MaxInterestAreas)
@@ -240,6 +165,7 @@ public class RegistrationsController : ControllerBase
 
     [HttpGet("investors")]
     [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [SwaggerOperation(Summary = "فهرست ثبت‌نام سرمایه‌گذاران", Description = "لیست درخواست‌های سرمایه‌گذار ثبت‌شده را برای ادمین بازمی‌گرداند.")]
     [ProducesResponseType(typeof(IReadOnlyCollection<InvestorRegistrationResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyCollection<InvestorRegistrationResponse>>> ListInvestorsAsync(CancellationToken cancellationToken)
     {
@@ -253,6 +179,7 @@ public class RegistrationsController : ControllerBase
 
     [HttpGet("investors/{id:guid}")]
     [Authorize(Policy = AuthorizationPolicies.Admin)]
+    [SwaggerOperation(Summary = "جزئیات ثبت‌نام سرمایه‌گذار", Description = "اطلاعات کامل یک سرمایه‌گذار ثبت‌نام‌شده را بازمی‌گرداند.")]
     [ProducesResponseType(typeof(InvestorRegistrationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<InvestorRegistrationResponse>> GetInvestorAsync(Guid id, CancellationToken cancellationToken)
@@ -398,25 +325,6 @@ public class RegistrationsController : ControllerBase
                 FileName = FileName.Trim(),
                 FileUrl = FileUrl.Trim()
             };
-    }
-
-    public record ParticipantDocumentUploadRequest
-    {
-        [Required]
-        public IFormFile? File { get; init; }
-            = null;
-    }
-
-    public record ParticipantDocumentUploadResponse
-    {
-        public string FileName { get; init; } = string.Empty;
-
-        public string FileUrl { get; init; } = string.Empty;
-
-        public string ContentType { get; init; } = string.Empty;
-
-        public long Size { get; init; }
-            = 0;
     }
 
     public record ParticipantLinkRequest

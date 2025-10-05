@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using OpenTelemetry.Exporter.Prometheus.AspNetCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -28,14 +29,22 @@ using NabTeams.Web.Background;
 using NabTeams.Web.Configuration;
 using NabTeams.Web.Hubs;
 using NabTeams.Web.Middleware;
-using Microsoft.Extensions.FileProviders;
-using Microsoft.Extensions.Options;
+using Swashbuckle.AspNetCore.Annotations;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "NabTeams API",
+        Version = "v1",
+        Description = "پوشش‌دهندهٔ سرویس‌های چت، پشتیبانی و ثبت‌نام شرکت‌کنندگان، داوران و سرمایه‌گذاران."
+    });
+    options.EnableAnnotations();
+});
 builder.Services.AddSignalR();
 builder.Services.AddResponseCompression(options =>
 {

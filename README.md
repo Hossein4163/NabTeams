@@ -46,13 +46,12 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
    cd backend/NabTeams/src/Web
    dotnet ef database update
    ```
-4. (اختیاری) مسیر ذخیره فایل مدارک را مطابق نیاز تنظیم کنید. مقدار پیش‌فرض `storage/uploads` است و در اولین اجرا به صورت خودکار ایجاد می‌شود. در صورت استفاده از CDN یا مسیر سفارشی، مقادیر `FileStorage__RootPath` و `FileStorage__PublicBaseUrl` را قبل از اجرای سرویس تعیین کنید.
-5. اجرای سرویس:
+4. اجرای سرویس:
    ```bash
    dotnet restore
    dotnet run --urls http://localhost:5000
    ```
-6. اولین اجرا مهاجرت EF Core را اعمال و منابع اولیهٔ دانش و ثبت‌نام را Seed می‌کند. مستندات Swagger در `http://localhost:5000/swagger` در دسترس است. فایل‌های بارگذاری‌شده از مسیر `http://localhost:5000/uploads/<file>` قابل دریافت هستند.
+5. اولین اجرا مهاجرت EF Core را اعمال و منابع اولیهٔ دانش و ثبت‌نام را Seed می‌کند. مستندات Swagger در `http://localhost:5000/swagger` در دسترس است.
 
 ### مهم‌ترین APIها
 

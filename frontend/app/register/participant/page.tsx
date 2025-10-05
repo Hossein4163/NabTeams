@@ -9,8 +9,7 @@ import {
   ParticipantTeamMemberInput,
   RegistrationDocumentCategory,
   RegistrationLinkType,
-  submitParticipantRegistration,
-  uploadParticipantDocument
+  submitParticipantRegistration
 } from '../../../lib/api';
 
 const stepLabels = [
@@ -59,17 +58,10 @@ const linkTypeOptions: Array<{ value: RegistrationLinkType; label: string }> = [
   { value: 'Other', label: 'سایر' }
 ];
 
-const allowedDocumentExtensionsLabel = 'PDF، ZIP، PPT، PPTX، DOC، DOCX، XLS، XLSX، PNG، JPG';
-const maxDocumentSizeMb = 25;
-
 function cleanupObjectUrl(url: string) {
   if (typeof url === 'string' && url.startsWith('blob:')) {
     URL.revokeObjectURL(url);
   }
-}
-
-function releaseDocumentUrls(documents: DocumentDraft[]) {
-  documents.forEach((doc) => cleanupObjectUrl(doc.fileUrl));
 }
 
 function createInitialState(): ParticipantFormState {
@@ -98,54 +90,12 @@ function createInitialState(): ParticipantFormState {
   };
 }
 
-function mapRegistrationToFormState(
-  registration: ParticipantRegistrationResponse
-): ParticipantFormState {
-  const members = registration.members.map((member) => ({
-    fullName: member.fullName ?? '',
-    role: member.role ?? '',
-    focusArea: member.focusArea ?? ''
-  }));
-  const documents = registration.documents.map((doc) => ({
-    category: doc.category,
-    fileName: doc.fileName ?? '',
-    fileUrl: doc.fileUrl ?? ''
-  }));
-  const links = registration.links.map((link) => ({
-    type: link.type,
-    label: link.label ?? '',
-    url: link.url ?? ''
-  }));
-
-  const normalizedMembers =
-    members.length > 0 ? members : [{ fullName: '', role: '', focusArea: '' }];
-
-  return {
-    headFirstName: registration.headFirstName ?? '',
-    headLastName: registration.headLastName ?? '',
-    nationalId: registration.nationalId ?? '',
-    phoneNumber: registration.phoneNumber ?? '',
-    email: registration.email ?? '',
-    birthDate: registration.birthDate ?? '',
-    educationDegree: registration.educationDegree ?? '',
-    fieldOfStudy: registration.fieldOfStudy ?? '',
-    teamName: registration.teamName ?? '',
-    hasTeam: registration.hasTeam,
-    teamCompleted: registration.hasTeam ? registration.teamCompleted : false,
-    additionalNotes: registration.additionalNotes ?? '',
-    members: registration.hasTeam ? normalizedMembers : [{ fullName: '', role: '', focusArea: '' }],
-    documents,
-    links
-  };
-}
-
 export default function ParticipantRegistrationPage() {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<ParticipantFormState>(() => createInitialState());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ParticipantRegistrationResponse | null>(null);
-  const [uploadingDocumentIndex, setUploadingDocumentIndex] = useState<number | null>(null);
 
   const filteredMembers = useMemo(() => {
     if (!form.hasTeam) {
@@ -215,7 +165,6 @@ export default function ParticipantRegistrationPage() {
   }
 
   function removeDocument(index: number) {
-    setUploadingDocumentIndex((current) => (current === index ? null : current));
     setForm((prev) => {
       const target = prev.documents[index];
       if (target?.fileUrl) {
@@ -228,43 +177,23 @@ export default function ParticipantRegistrationPage() {
     });
   }
 
-  async function handleDocumentFile(index: number, file: File | null) {
+  function handleDocumentFile(index: number, file: File | null) {
     if (!file) {
       return;
     }
-
-    setError(null);
-    setUploadingDocumentIndex(index);
-    try {
-      const upload = await uploadParticipantDocument(file);
-      setForm((prev) => {
-        const target = prev.documents[index];
-        if (!target) {
-          return prev;
-        }
-        if (target.fileUrl) {
-          cleanupObjectUrl(target.fileUrl);
-        }
-        const nextDocuments = prev.documents.map((doc, idx) =>
-          idx === index
-            ? {
-                ...doc,
-                fileName: upload.fileName || file.name,
-                fileUrl: upload.fileUrl
-              }
-            : doc
-        );
-        return { ...prev, documents: nextDocuments };
-      });
-    } catch (err) {
-      if (err instanceof Error) {
-        setError(err.message);
-      } else {
-        setError('بارگذاری فایل ناموفق بود.');
+    setForm((prev) => {
+      const target = prev.documents[index];
+      if (!target) {
+        return prev;
       }
-    } finally {
-      setUploadingDocumentIndex(null);
-    }
+      if (target.fileUrl) {
+        cleanupObjectUrl(target.fileUrl);
+      }
+      const nextDocuments = prev.documents.map((doc, idx) =>
+        idx === index ? { ...doc, fileName: file.name, fileUrl: URL.createObjectURL(file) } : doc
+      );
+      return { ...prev, documents: nextDocuments };
+    });
   }
 
   function updateLink(index: number, key: keyof LinkDraft, value: string) {
@@ -347,10 +276,6 @@ export default function ParticipantRegistrationPage() {
   }
 
   async function handleNext() {
-    if (uploadingDocumentIndex !== null) {
-      setError('لطفاً تا پایان بارگذاری فایل منتظر بمانید.');
-      return;
-    }
     if (!validateStep(step)) {
       return;
     }
@@ -363,17 +288,12 @@ export default function ParticipantRegistrationPage() {
   }
 
   async function handleSubmit() {
-    if (uploadingDocumentIndex !== null) {
-      setError('لطفاً تا پایان بارگذاری فایل منتظر بمانید.');
-      return;
-    }
     if (!validateStep(step)) {
       return;
     }
 
     setSubmitting(true);
     setError(null);
-    setStatusAlert(null);
 
     const payload: ParticipantRegistrationPayload = {
       headFirstName: form.headFirstName.trim(),
@@ -422,78 +342,16 @@ export default function ParticipantRegistrationPage() {
   }
 
   function handleReset() {
-    releaseDocumentUrls(form.documents);
+    form.documents.forEach((doc) => cleanupObjectUrl(doc.fileUrl));
     setForm(createInitialState());
     setResult(null);
     setError(null);
     setStep(0);
-    setUploadingDocumentIndex(null);
-    setStatusAlert(null);
-    setLoadingExisting(false);
-    setFinalizing(false);
-  }
-
-  async function handleEditRegistration() {
-    if (!result) {
-      return;
-    }
-    setLoadingExisting(true);
-    setStatusAlert(null);
-    try {
-      const registration = await fetchParticipantRegistration(result.id);
-      releaseDocumentUrls(form.documents);
-      setForm(mapRegistrationToFormState(registration));
-      setResult(null);
-      setError(null);
-      setStep(0);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'بارگذاری مجدد اطلاعات با خطا مواجه شد.';
-      setStatusAlert({ type: 'error', message });
-    } finally {
-      setLoadingExisting(false);
-    }
-  }
-
-  async function handleFinalize() {
-    if (!result) {
-      return;
-    }
-    setFinalizing(true);
-    setStatusAlert(null);
-    try {
-      const response = await finalizeParticipantRegistration(result.id);
-      setResult(response);
-      setStatusAlert({ type: 'success', message: 'ثبت‌نام شما با موفقیت نهایی شد.' });
-    } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'نهایی‌سازی ثبت‌نام امکان‌پذیر نبود. لطفاً با استفاده از گزینه ویرایش، اطلاعات را بازبینی کنید.';
-      setStatusAlert({
-        type: 'error',
-        message
-      });
-    } finally {
-      setFinalizing(false);
-    }
   }
 
   if (result) {
-    const finalizeDate = result.finalizedAt ? new Date(result.finalizedAt).toLocaleString('fa-IR') : null;
-    const isFinalized = Boolean(finalizeDate);
     return (
       <div className="space-y-6">
-        {statusAlert && (
-          <div
-            className={`rounded-lg border p-3 text-sm ${
-              statusAlert.type === 'success'
-                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100'
-                : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
-            }`}
-          >
-            {statusAlert.message}
-          </div>
-        )}
         <div className="rounded-xl border border-emerald-600/50 bg-emerald-500/10 p-6">
           <h2 className="text-2xl font-semibold text-emerald-300">ثبت‌نام با موفقیت انجام شد</h2>
           <p className="mt-3 text-sm text-emerald-100/90">
@@ -520,10 +378,6 @@ export default function ParticipantRegistrationPage() {
             <div>
               <dt className="text-slate-400">وضعیت تکمیل تیم</dt>
               <dd>{result.teamCompleted ? 'تیم تکمیل است' : 'در حال تکمیل'}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-400">وضعیت نهایی‌سازی</dt>
-              <dd>{isFinalized ? `نهایی شده در ${finalizeDate}` : 'در انتظار تأیید نهایی'}</dd>
             </div>
           </dl>
           {result.members.length > 0 && (
@@ -559,39 +413,20 @@ export default function ParticipantRegistrationPage() {
               <ul className="mt-2 space-y-2 text-sm text-emerald-200">
                 {result.links.map((link) => (
                   <li key={link.id} className="truncate">
-                    <span className="text-slate-400">[{link.type}]</span>{' '}
-                    {link.label && link.label.trim() ? link.label : link.url}
+                    <span className="text-slate-400">[{link.type}]</span> {link.label ?? link.url}
                   </li>
                 ))}
               </ul>
             </div>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleReset}
-            className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
-          >
-            ثبت‌نام جدید
-          </button>
-          <button
-            type="button"
-            onClick={handleEditRegistration}
-            disabled={loadingExisting || finalizing}
-            className="inline-flex items-center justify-center rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
-          >
-            {loadingExisting ? 'در حال بارگذاری...' : 'ویرایش ثبت‌نام'}
-          </button>
-          <button
-            type="button"
-            onClick={handleFinalize}
-            disabled={finalizing || loadingExisting || isFinalized}
-            className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-emerald-950 transition hover:bg-emerald-400 disabled:opacity-60"
-          >
-            {isFinalized ? 'ثبت‌نام نهایی شده است' : finalizing ? 'در حال نهایی‌سازی...' : 'تأیید نهایی'}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleReset}
+          className="inline-flex items-center justify-center rounded-lg border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-500/10"
+        >
+          ثبت‌نام جدید
+        </button>
       </div>
     );
   }
@@ -773,8 +608,7 @@ export default function ParticipantRegistrationPage() {
                     <button
                       type="button"
                       onClick={() => removeDocument(index)}
-                      disabled={uploadingDocumentIndex === index}
-                      className="text-xs text-red-300 transition hover:text-red-200 disabled:opacity-50"
+                      className="text-xs text-red-300 transition hover:text-red-200"
                     >
                       حذف فایل
                     </button>
@@ -800,21 +634,10 @@ export default function ParticipantRegistrationPage() {
                       <label className="block">انتخاب فایل (اختیاری)</label>
                       <input
                         type="file"
-                        className="mt-1 w-full text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={uploadingDocumentIndex !== null}
-                        onChange={async (event) => {
-                          const selectedFile = event.target.files?.[0] ?? null;
-                          await handleDocumentFile(index, selectedFile);
-                          event.target.value = '';
-                        }}
+                        className="mt-1 w-full text-xs text-slate-200"
+                        onChange={(event) => handleDocumentFile(index, event.target.files?.[0] ?? null)}
                       />
-                      {uploadingDocumentIndex === index ? (
-                        <p className="mt-1 text-xs text-emerald-300">در حال بارگذاری فایل...</p>
-                      ) : (
-                        <p className="mt-1 text-xs text-slate-500">
-                          فرمت‌های مجاز: {allowedDocumentExtensionsLabel}. حداکثر حجم هر فایل {maxDocumentSizeMb} مگابایت است.
-                        </p>
-                      )}
+                      <p className="mt-1 text-xs text-slate-500">در محیط آزمایشی، فایل به صورت محلی ثبت می‌شود.</p>
                     </div>
                     <TextField
                       label="نام فایل"

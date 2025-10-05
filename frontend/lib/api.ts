@@ -262,38 +262,16 @@ export interface ParticipantRegistrationPayload {
   links: ParticipantLinkInput[];
 }
 
-export interface ParticipantRegistrationMemberResponse extends ParticipantTeamMemberInput {
-  id: string;
-}
-
-export interface ParticipantRegistrationDocumentResponse extends ParticipantDocumentInput {
-  id: string;
-}
-
-export interface ParticipantRegistrationLinkResponse extends ParticipantLinkInput {
-  id: string;
-  label?: string | null;
-}
-
 export interface ParticipantRegistrationResponse {
   id: string;
   headFirstName: string;
   headLastName: string;
-  nationalId: string;
-  phoneNumber: string;
-  email?: string | null;
-  birthDate?: string | null;
-  educationDegree: string;
-  fieldOfStudy: string;
   teamName: string;
-  hasTeam: boolean;
-  teamCompleted: boolean;
-  additionalNotes?: string | null;
   submittedAt: string;
-  finalizedAt?: string | null;
-  members: ParticipantRegistrationMemberResponse[];
-  documents: ParticipantRegistrationDocumentResponse[];
-  links: ParticipantRegistrationLinkResponse[];
+  teamCompleted: boolean;
+  members: Array<ParticipantTeamMemberInput & { id: string }>;
+  documents: Array<ParticipantDocumentInput & { id: string }>;
+  links: Array<ParticipantLinkInput & { id: string; label: string }>;
 }
 
 export async function submitParticipantRegistration(
@@ -305,42 +283,6 @@ export async function submitParticipantRegistration(
     ...auth,
     body: JSON.stringify(payload)
   });
-}
-
-export interface ParticipantDocumentUploadResponse {
-  fileName: string;
-  fileUrl: string;
-  contentType: string;
-  size: number;
-}
-
-export async function uploadParticipantDocument(
-  file: File,
-  auth?: AuthContext
-): Promise<ParticipantDocumentUploadResponse> {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const headers = new Headers();
-  applyAuthHeaders(headers, auth);
-
-  const response = await fetch(`${API_BASE}/api/registrations/participants/uploads`, {
-    method: 'POST',
-    body: formData,
-    headers,
-    cache: 'no-store'
-  });
-
-  const body = await safeReadJson(response);
-  if (!response.ok) {
-    const problem = body as any;
-    const firstError = problem?.errors
-      ? Object.values(problem.errors as Record<string, string[]>).flat()[0]
-      : null;
-    throw new Error(firstError ?? problem?.detail ?? problem?.title ?? 'بارگذاری فایل ناموفق بود');
-  }
-
-  return body as ParticipantDocumentUploadResponse;
 }
 
 export interface JudgeRegistrationPayload {
