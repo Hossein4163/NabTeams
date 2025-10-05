@@ -1,12 +1,15 @@
+using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpLogging;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
@@ -194,6 +197,8 @@ builder.Services.AddScoped<IOperationsChecklistService, OperationsChecklistServi
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
 builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();
+builder.Services.Configure<FileStorageOptions>(builder.Configuration.GetSection("FileStorage"));
+builder.Services.AddSingleton<IFileStorageService, LocalFileStorageService>();
 
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database")
@@ -220,6 +225,18 @@ builder.Services.AddOpenTelemetry()
 
 var app = builder.Build();
 
+var fileStorageOptions = app.Services.GetRequiredService<IOptions<FileStorageOptions>>().Value;
+var uploadsRoot = ResolveStorageRoot(app.Environment.ContentRootPath, fileStorageOptions.RootPath);
+Directory.CreateDirectory(uploadsRoot);
+var requestPath = ResolveRequestPath(fileStorageOptions.PublicBaseUrl);
+var contentTypeProvider = new FileExtensionContentTypeProvider();
+var registrationDocumentStaticFiles = new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsRoot),
+    RequestPath = requestPath,
+    ContentTypeProvider = contentTypeProvider
+};
+
 await DatabaseInitializer.InitializeAsync(app.Services);
 
 if (app.Environment.IsDevelopment())
@@ -238,6 +255,17 @@ if (!app.Environment.IsDevelopment())
 
 app.UseResponseCompression();
 app.UseSecurityHeaders();
+app.UseStaticFiles(registrationDocumentStaticFiles);
+
+app.UseStaticFiles();
+
+app.UseStaticFiles();
+
+app.UseStaticFiles();
+
+app.UseStaticFiles();
+
+app.UseStaticFiles();
 
 app.UseStaticFiles();
 
@@ -323,6 +351,37 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 });
 
 app.Run();
+
+static string ResolveStorageRoot(string contentRoot, string? configuredRoot)
+{
+    if (string.IsNullOrWhiteSpace(configuredRoot))
+    {
+        return Path.Combine(contentRoot, "storage", "uploads");
+    }
+
+    var path = configuredRoot;
+    if (!Path.IsPathRooted(path))
+    {
+        path = Path.Combine(contentRoot, path);
+    }
+
+    return Path.GetFullPath(path);
+}
+
+static PathString ResolveRequestPath(string? publicBaseUrl)
+{
+    if (string.IsNullOrWhiteSpace(publicBaseUrl))
+    {
+        return new PathString("/uploads");
+    }
+
+    if (Uri.TryCreate(publicBaseUrl, UriKind.Absolute, out var absolute))
+    {
+        return new PathString(absolute.AbsolutePath);
+    }
+
+    return new PathString(publicBaseUrl.StartsWith('/') ? publicBaseUrl : $"/{publicBaseUrl}");
+}
 
 static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy() =>
     HttpPolicyExtensions
