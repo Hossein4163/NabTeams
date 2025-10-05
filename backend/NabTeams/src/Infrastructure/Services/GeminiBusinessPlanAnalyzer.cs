@@ -18,29 +18,42 @@ namespace NabTeams.Infrastructure.Services;
 public class GeminiBusinessPlanAnalyzer : IBusinessPlanAnalyzer
 {
     private readonly HttpClient _httpClient;
-    private readonly GeminiOptions _options;
+    private readonly GeminiOptions _fallbackOptions;
+    private readonly IIntegrationSettingsService _integrationSettings;
     private readonly ILogger<GeminiBusinessPlanAnalyzer> _logger;
 
     public GeminiBusinessPlanAnalyzer(
         HttpClient httpClient,
+        IIntegrationSettingsService integrationSettings,
         IOptions<GeminiOptions> options,
         ILogger<GeminiBusinessPlanAnalyzer> logger)
     {
         _httpClient = httpClient;
-        _options = options.Value;
+        _integrationSettings = integrationSettings;
+        _fallbackOptions = options.Value;
         _logger = logger;
     }
 
     public async Task<BusinessPlanReview> AnalyzeAsync(BusinessPlanAnalysisRequest request, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var options = await _integrationSettings.GetGeminiOptionsAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(options.ApiKey))
         {
             throw new InvalidOperationException("Gemini API key is not configured. Set Infrastructure:Gemini:ApiKey in configuration.");
         }
 
-        var model = string.IsNullOrWhiteSpace(_options.BusinessPlanModel)
-            ? _options.RagModel
-            : _options.BusinessPlanModel;
+        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+            ? _fallbackOptions.BaseUrl
+            : options.BaseUrl;
+
+        if (!string.IsNullOrWhiteSpace(baseUrl))
+        {
+            _httpClient.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+        }
+
+        var model = string.IsNullOrWhiteSpace(options.BusinessPlanModel)
+            ? options.RagModel
+            : options.BusinessPlanModel;
 
         var promptBuilder = new StringBuilder();
         promptBuilder.AppendLine("You are an accelerator mentor evaluating Iranian startup applications.");
@@ -81,12 +94,12 @@ public class GeminiBusinessPlanAnalyzer : IBusinessPlanAnalyzer
             },
             generationConfig = new
             {
-                temperature = _options.BusinessPlanTemperature,
+                temperature = options.BusinessPlanTemperature,
                 responseMimeType = "application/json"
             }
         };
 
-        var endpoint = $"v1beta/models/{model}:generateContent?key={_options.ApiKey}";
+        var endpoint = $"v1beta/models/{model}:generateContent?key={options.ApiKey}";
         try
         {
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)

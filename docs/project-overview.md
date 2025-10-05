@@ -64,6 +64,7 @@
   - `AppealsController.cs` — ثبت اعتراض توسط کاربر و بررسی/تصمیم‌گیری توسط ادمین.
   - `KnowledgeBaseController.cs` — CRUD پایگاه دانش (ادمین).
   - `SupportController.cs` — مسیر پرسش پشتیبانی دانشی (Gemini RAG).
+  - `IntegrationSettingsController.cs` — مدیریت کلیدهای Gemini، درگاه پرداخت، SMTP و SMS توسط ادمین از طریق API.
 - **Hubs/ChatHub.cs** — کانال SignalR برای توزیع پیام‌های منتشر شده و به‌روزرسانی بلادرنگ.
 - **Background/ChatModerationWorker.cs** — Worker پس‌زمینه‌ای که صف پیام‌ها را مصرف و نتایج پایش را ثبت می‌کند.
 - **appsettings.json** — تنظیمات پیش‌فرض (اتصال PostgreSQL، Gemini، Logging و تنظیمات توسعه).
@@ -88,6 +89,7 @@
 - `layout.tsx` — پوسته اصلی با فونت فارسی، RTL، و Providers عمومی.
 - `providers.tsx` — راه‌اندازی `SessionProvider`, `RoleProvider` و تم.
 - `page.tsx` — داشبورد نقش‌محور که بر اساس نقش به ماژول‌ها لینک می‌دهد.
+- `dashboard/admin/integrations/page.tsx` — فرم مدیریت تنظیمات یکپارچه‌سازی (API Key، پرداخت، ایمیل/پیامک) ویژه ادمین.
 - `(dashboard)/global-chat/page.tsx` — صفحه چت عمومی با `ChatPanel`.
 - `(dashboard)/support/page.tsx` — دسترسی به پشتیبانی دانشی با `SupportPanel`.
 - `(dashboard)/knowledge-base/page.tsx` — مدیریت منابع دانش (فقط ادمین).
@@ -106,6 +108,7 @@
 ### کتابخانه‌ها (`frontend/lib`)
 
 - `api.ts` — کلاینت axios با درج توکن NextAuth و هدرهای دیباگ در حالت توسعه.
+  - شامل توابع `listIntegrationSettings`, `upsertIntegrationSetting`, `activateIntegrationSetting`, `deleteIntegrationSetting` برای مدیریت تنظیمات ادمین.
 - `chat-hub.ts` — راه‌اندازی اتصال SignalR به `/hubs/chat` به همراه مدیریت Debug Headers.
 - `role-context.tsx` — Context و Provider برای نقش فعال.
 - `use-role.ts` — هوک سفارشی برای کار با نقش فعال و سطح دسترسی.

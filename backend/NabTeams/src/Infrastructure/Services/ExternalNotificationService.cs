@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NabTeams.Application.Abstractions;
+using NabTeams.Application.Common;
 using NabTeams.Domain.Entities;
 using NabTeams.Domain.Enums;
 
@@ -16,28 +17,32 @@ namespace NabTeams.Infrastructure.Services;
 public class ExternalNotificationService : INotificationService
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly NotificationOptions _options;
+    private readonly IIntegrationSettingsService _integrationSettings;
     private readonly ILogger<ExternalNotificationService> _logger;
 
     public ExternalNotificationService(
         IHttpClientFactory httpClientFactory,
+        IIntegrationSettingsService integrationSettings,
         IOptions<NotificationOptions> options,
         ILogger<ExternalNotificationService> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _options = options.Value;
+        _integrationSettings = integrationSettings;
+        _ = options.Value;
         _logger = logger;
     }
 
     public async Task<RegistrationNotification> SendAsync(NotificationRequest request, CancellationToken cancellationToken = default)
     {
+        var options = await _integrationSettings.GetNotificationOptionsAsync(cancellationToken);
+
         switch (request.Channel)
         {
             case NotificationChannel.Email:
-                await SendEmailAsync(request, cancellationToken);
+                await SendEmailAsync(request, options.Email, cancellationToken);
                 break;
             case NotificationChannel.Sms:
-                await SendSmsAsync(request, cancellationToken);
+                await SendSmsAsync(request, options.Sms, cancellationToken);
                 break;
             default:
                 throw new NotSupportedException($"Notification channel {request.Channel} is not supported.");
@@ -55,22 +60,22 @@ public class ExternalNotificationService : INotificationService
         };
     }
 
-    private async Task SendEmailAsync(NotificationRequest request, CancellationToken cancellationToken)
+    private async Task SendEmailAsync(NotificationRequest request, NotificationOptions.EmailOptions options, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_options.Email.Host) || string.IsNullOrWhiteSpace(_options.Email.SenderAddress))
+        if (string.IsNullOrWhiteSpace(options.Host) || string.IsNullOrWhiteSpace(options.SenderAddress))
         {
             throw new InvalidOperationException("Email notification settings are incomplete. Configure Infrastructure:Notification:Email.");
         }
 
-        using var smtpClient = new SmtpClient(_options.Email.Host, _options.Email.Port)
+        using var smtpClient = new SmtpClient(options.Host, options.Port)
         {
-            EnableSsl = _options.Email.UseSsl,
-            Credentials = new NetworkCredential(_options.Email.Username, _options.Email.Password)
+            EnableSsl = options.UseSsl,
+            Credentials = new NetworkCredential(options.Username, options.Password)
         };
 
         using var message = new MailMessage
         {
-            From = new MailAddress(_options.Email.SenderAddress, _options.Email.SenderDisplayName),
+            From = new MailAddress(options.SenderAddress, options.SenderDisplayName),
             Subject = request.Subject,
             Body = request.Message,
             BodyEncoding = System.Text.Encoding.UTF8,
@@ -81,24 +86,24 @@ public class ExternalNotificationService : INotificationService
         await smtpClient.SendMailAsync(message, cancellationToken);
     }
 
-    private async Task SendSmsAsync(NotificationRequest request, CancellationToken cancellationToken)
+    private async Task SendSmsAsync(NotificationRequest request, NotificationOptions.SmsOptions options, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_options.Sms.ApiKey))
+        if (string.IsNullOrWhiteSpace(options.ApiKey))
         {
             throw new InvalidOperationException("SMS notification settings are incomplete. Configure Infrastructure:Notification:Sms.");
         }
 
         var client = _httpClientFactory.CreateClient("notifications.sms");
-        if (client.BaseAddress is null)
+        if (!string.IsNullOrWhiteSpace(options.BaseUrl))
         {
-            client.BaseAddress = new Uri(_options.Sms.BaseUrl);
+            client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
         }
 
-        var path = _options.Sms.Path.Replace("{apiKey}", _options.Sms.ApiKey, StringComparison.OrdinalIgnoreCase);
+        var path = options.Path.Replace("{apiKey}", options.ApiKey, StringComparison.OrdinalIgnoreCase);
         using var content = new FormUrlEncodedContent(new[]
         {
             new KeyValuePair<string, string>("receptor", request.Recipient),
-            new KeyValuePair<string, string>("sender", _options.Sms.SenderNumber),
+            new KeyValuePair<string, string>("sender", options.SenderNumber),
             new KeyValuePair<string, string>("message", request.Message)
         });
 

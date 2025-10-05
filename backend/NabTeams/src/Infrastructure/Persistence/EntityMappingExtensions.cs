@@ -199,6 +199,32 @@ public static class EntityMappingExtensions
                 .ToList()
         };
 
+    public static IntegrationSetting ToModel(this IntegrationSettingEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            Type = entity.Type,
+            ProviderKey = entity.ProviderKey,
+            DisplayName = entity.DisplayName,
+            Configuration = entity.Configuration,
+            IsActive = entity.IsActive,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt
+        };
+
+    public static IntegrationSettingEntity ToEntity(this IntegrationSetting model)
+        => new()
+        {
+            Id = model.Id,
+            Type = model.Type,
+            ProviderKey = model.ProviderKey,
+            DisplayName = model.DisplayName,
+            Configuration = model.Configuration,
+            IsActive = model.IsActive,
+            CreatedAt = model.CreatedAt,
+            UpdatedAt = model.UpdatedAt
+        };
+
     public static ParticipantRegistrationEntity ToEntity(this ParticipantRegistration model)
     {
         var entity = new ParticipantRegistrationEntity

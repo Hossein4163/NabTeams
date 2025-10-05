@@ -590,6 +590,52 @@ namespace NabTeams.Infrastructure.Persistence.Migrations
                 b.ToTable("BusinessPlanReviews");
             });
 
+            modelBuilder.Entity("NabTeams.Infrastructure.Persistence.IntegrationSettingEntity", b =>
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uuid");
+
+                b.Property<string>("Configuration")
+                    .IsRequired()
+                    .HasColumnType("text");
+
+                b.Property<DateTimeOffset>("CreatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("DisplayName")
+                    .IsRequired()
+                    .HasMaxLength(128)
+                    .HasColumnType("character varying(128)");
+
+                b.Property<bool>("IsActive")
+                    .HasColumnType("boolean");
+
+                b.Property<string>("ProviderKey")
+                    .IsRequired()
+                    .HasMaxLength(64)
+                    .HasColumnType("character varying(64)");
+
+                b.Property<string>("Type")
+                    .IsRequired()
+                    .HasColumnType("text");
+
+                b.Property<DateTimeOffset>("UpdatedAt")
+                    .HasColumnType("timestamp with time zone");
+
+                b.HasKey("Id");
+
+                b.HasIndex("Type", "ProviderKey")
+                    .IsUnique()
+                    .HasDatabaseName("IX_IntegrationSettings_Type_ProviderKey");
+
+                b.HasIndex("Type")
+                    .HasDatabaseName("IX_IntegrationSettings_Type_Active")
+                    .HasFilter("\"IsActive\" = TRUE");
+
+                b.ToTable("IntegrationSettings");
+            });
+
             modelBuilder.Entity("NabTeams.Infrastructure.Persistence.RegistrationPaymentEntity", b =>
             {
                 b.Property<Guid>("Id")

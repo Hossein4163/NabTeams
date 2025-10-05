@@ -26,6 +26,7 @@ public class ApplicationDbContext : DbContext
     public DbSet<RegistrationPaymentEntity> RegistrationPayments => Set<RegistrationPaymentEntity>();
     public DbSet<RegistrationNotificationEntity> RegistrationNotifications => Set<RegistrationNotificationEntity>();
     public DbSet<BusinessPlanReviewEntity> BusinessPlanReviews => Set<BusinessPlanReviewEntity>();
+    public DbSet<IntegrationSettingEntity> IntegrationSettings => Set<IntegrationSettingEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -40,6 +41,7 @@ public class ApplicationDbContext : DbContext
         var paymentStatusConverter = new EnumToStringConverter<RegistrationPaymentStatus>();
         var notificationChannelConverter = new EnumToStringConverter<NotificationChannel>();
         var businessPlanStatusConverter = new EnumToStringConverter<BusinessPlanReviewStatus>();
+        var integrationProviderConverter = new EnumToStringConverter<IntegrationProviderType>();
 
         var stringListComparer = new ValueComparer<List<string>>(
             (left, right) => (left ?? new()).SequenceEqual(right ?? new()),
@@ -222,6 +224,23 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.Model).HasMaxLength(128).IsRequired();
             entity.Property(e => e.SourceDocumentUrl).HasMaxLength(512);
             entity.Property(e => e.CreatedAt).IsRequired();
+        });
+
+        modelBuilder.Entity<IntegrationSettingEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Type).HasConversion(integrationProviderConverter).IsRequired();
+            entity.Property(e => e.ProviderKey).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.DisplayName).HasMaxLength(128).IsRequired();
+            entity.Property(e => e.Configuration).HasColumnType("text").IsRequired();
+            entity.Property(e => e.IsActive).IsRequired();
+            entity.Property(e => e.CreatedAt).IsRequired();
+            entity.Property(e => e.UpdatedAt).IsRequired();
+
+            entity.HasIndex(e => new { e.Type, e.ProviderKey }).IsUnique();
+            entity.HasIndex(e => e.Type)
+                .HasDatabaseName("IX_IntegrationSettings_Type_Active")
+                .HasFilter("\"IsActive\" = TRUE");
         });
 
         modelBuilder.Entity<JudgeRegistrationEntity>(entity =>
@@ -500,5 +519,21 @@ public class InvestorRegistrationEntity
     public DateTimeOffset? FinalizedAt { get; set; }
         = null;
     public DateTimeOffset SubmittedAt { get; set; }
+        = DateTimeOffset.UtcNow;
+}
+
+public class IntegrationSettingEntity
+{
+    public Guid Id { get; set; }
+    public IntegrationProviderType Type { get; set; }
+        = IntegrationProviderType.Gemini;
+    public string ProviderKey { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public string Configuration { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+        = false;
+    public DateTimeOffset CreatedAt { get; set; }
+        = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; }
         = DateTimeOffset.UtcNow;
 }

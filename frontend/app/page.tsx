@@ -7,6 +7,8 @@ import { RoleSwitcher } from '../components/role-switcher';
 export default function HomePage() {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated';
+  const roles = (session?.user?.roles ?? []) as string[];
+  const isAdmin = roles.includes('admin');
 
   return (
     <div className="space-y-8">
@@ -53,6 +55,13 @@ export default function HomePage() {
           title="📊 پیگیری وضعیت ثبت‌نام"
           description="با وارد کردن کد پیگیری، وضعیت تایید، اعلان‌های ارسالی و جزئیات پرداخت مرحله دوم را مشاهده کنید."
         />
+        {isAdmin && (
+          <DashboardLink
+            href="/dashboard/admin/integrations"
+            title="🔐 پیکربندی کلیدها و درگاه‌ها"
+            description="کلیدهای Gemini، پنل پیامکی و درگاه‌های پرداخت را بدون ویرایش فایل پیکربندی از طریق داشبورد تنظیم کنید."
+          />
+        )}
         <DashboardLink
           href="/(dashboard)/global-chat"
           title="👥 چت گلوبال"

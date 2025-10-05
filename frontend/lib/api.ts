@@ -19,6 +19,8 @@ export type NotificationChannel = 'Email' | 'Sms';
 
 export type BusinessPlanReviewStatus = 'Pending' | 'Completed' | 'Failed';
 
+export type IntegrationProviderType = 'Gemini' | 'PaymentGateway' | 'Sms' | 'Email';
+
 export interface SessionUserInfo {
   id?: string | null;
   email?: string | null;
@@ -397,6 +399,59 @@ export async function approveParticipantRegistration(
     method: 'POST',
     ...auth,
     body: JSON.stringify(payload)
+  });
+}
+
+export interface IntegrationSetting {
+  id: string;
+  type: IntegrationProviderType;
+  providerKey: string;
+  displayName: string;
+  isActive: boolean;
+  configuration: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IntegrationSettingUpsertPayload {
+  id?: string;
+  type: IntegrationProviderType;
+  providerKey: string;
+  displayName?: string | null;
+  configuration: string;
+  activate?: boolean;
+}
+
+export async function listIntegrationSettings(
+  auth?: AuthContext,
+  type?: IntegrationProviderType
+): Promise<IntegrationSetting[]> {
+  const query = type ? `?type=${encodeURIComponent(type)}` : '';
+  return apiFetch<IntegrationSetting[]>(`/api/admin/integrations${query}`, auth);
+}
+
+export async function upsertIntegrationSetting(
+  payload: IntegrationSettingUpsertPayload,
+  auth?: AuthContext
+): Promise<IntegrationSetting> {
+  return apiFetch<IntegrationSetting>(`/api/admin/integrations`, {
+    method: 'POST',
+    ...auth,
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function activateIntegrationSetting(id: string, auth?: AuthContext): Promise<void> {
+  await apiFetch<void>(`/api/admin/integrations/${id}/activate`, {
+    method: 'POST',
+    ...auth
+  });
+}
+
+export async function deleteIntegrationSetting(id: string, auth?: AuthContext): Promise<void> {
+  await apiFetch<void>(`/api/admin/integrations/${id}`, {
+    method: 'DELETE',
+    ...auth
   });
 }
 

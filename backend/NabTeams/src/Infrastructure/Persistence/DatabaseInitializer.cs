@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NabTeams.Domain.Enums;
@@ -208,6 +209,95 @@ public static class DatabaseInitializer
                 AdditionalNotes = "به دنبال تیم‌هایی با مدل درآمدی مشخص و مشتریان پایلوت هستم.",
                 Status = RegistrationStatus.Submitted,
                 SubmittedAt = DateTimeOffset.UtcNow.AddDays(-3)
+            });
+
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        if (!await context.IntegrationSettings.AnyAsync(cancellationToken))
+        {
+            var now = DateTimeOffset.UtcNow;
+            context.IntegrationSettings.AddRange(new[]
+            {
+                new IntegrationSettingEntity
+                {
+                    Id = Guid.Parse("A8E4E4D1-9E8E-4E5E-9BDE-5B2D39E1D5B4"),
+                    Type = IntegrationProviderType.Gemini,
+                    ProviderKey = "gemini",
+                    DisplayName = "Google Gemini Sandbox",
+                    Configuration = JsonSerializer.Serialize(new
+                    {
+                        ApiKey = "YOUR_GEMINI_API_KEY",
+                        Endpoint = "https://generativelanguage.googleapis.com/v1beta",
+                        BaseUrl = "https://generativelanguage.googleapis.com",
+                        ModerationModel = "gemini-1.5-pro",
+                        RagModel = "gemini-1.5-pro",
+                        BusinessPlanModel = "gemini-1.5-pro",
+                        BusinessPlanTemperature = 0.2
+                    }),
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new IntegrationSettingEntity
+                {
+                    Id = Guid.Parse("B2C3D4E5-F6A7-48B9-9C1D-0E2F3A4B5C6D"),
+                    Type = IntegrationProviderType.PaymentGateway,
+                    ProviderKey = "idpay",
+                    DisplayName = "IdPay Sandbox",
+                    Configuration = JsonSerializer.Serialize(new
+                    {
+                        Provider = "idpay",
+                        BaseUrl = "https://api.idpay.ir",
+                        ApiKey = "IDPAY_SANDBOX_KEY",
+                        CreatePath = "/v1.1/payment",
+                        VerifyPath = "/v1.1/payment/verify",
+                        CallbackBaseUrl = "https://localhost:5000",
+                        Sandbox = true
+                    }),
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new IntegrationSettingEntity
+                {
+                    Id = Guid.Parse("C4D5E6F7-A8B9-4C0D-9E1F-203040506070"),
+                    Type = IntegrationProviderType.Email,
+                    ProviderKey = "smtp",
+                    DisplayName = "SMTP Demo",
+                    Configuration = JsonSerializer.Serialize(new
+                    {
+                        Provider = "smtp",
+                        Host = "smtp.example.com",
+                        Port = 587,
+                        UseSsl = true,
+                        Username = "demo",
+                        Password = "demo-password",
+                        SenderAddress = "no-reply@example.com",
+                        SenderDisplayName = "NabTeams"
+                    }),
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new IntegrationSettingEntity
+                {
+                    Id = Guid.Parse("D6E7F8A9-B0C1-4D2E-9F30-405060708090"),
+                    Type = IntegrationProviderType.Sms,
+                    ProviderKey = "kavenegar",
+                    DisplayName = "Kavenegar Sandbox",
+                    Configuration = JsonSerializer.Serialize(new
+                    {
+                        Provider = "kavenegar",
+                        BaseUrl = "https://api.kavenegar.com",
+                        ApiKey = "KAVENEGAR_SANDBOX_KEY",
+                        SenderNumber = "10004321",
+                        Path = "v1/{apiKey}/sms/send.json"
+                    }),
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                }
             });
 
             await context.SaveChangesAsync(cancellationToken);
