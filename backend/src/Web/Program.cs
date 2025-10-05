@@ -1,0 +1,264 @@
+using System.IO.Compression;
+using System.Net;
+using System.Security.Claims;
+using System.Text.Json;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpLogging;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.ResponseCompression;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Exporter.Prometheus.AspNetCore;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using Polly;
+using Polly.Extensions.Http;
+using NabTeams.Application.Abstractions;
+using NabTeams.Application.Common;
+using NabTeams.Infrastructure.HealthChecks;
+using NabTeams.Infrastructure.Monitoring;
+using NabTeams.Infrastructure.Persistence;
+using NabTeams.Infrastructure.Queues;
+using NabTeams.Infrastructure.Services;
+using NabTeams.Web.Background;
+using NabTeams.Web.Configuration;
+using NabTeams.Web.Hubs;
+using NabTeams.Web.Middleware;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+builder.Services.AddSignalR();
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+builder.Services.AddHttpLogging(logging =>
+{
+    logging.LoggingFields = HttpLoggingFields.RequestPath | HttpLoggingFields.RequestMethod | HttpLoggingFields.ResponseStatusCode;
+    logging.RequestBodyLogLimit = 0;
+    logging.ResponseBodyLogLimit = 0;
+});
+
+builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
+builder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSection("Authentication"));
+var authenticationSettings = builder.Configuration.GetSection("Authentication").Get<AuthenticationSettings>() ?? new AuthenticationSettings { Disabled = true };
+
+builder.Services.AddHttpClient("gemini", client =>
+    {
+        var options = builder.Configuration.GetSection("Gemini").Get<GeminiOptions>() ?? new GeminiOptions();
+        client.BaseAddress = new Uri(options.Endpoint.TrimEnd('/') + "/");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        client.Timeout = TimeSpan.FromSeconds(15);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+if (!authenticationSettings.Disabled)
+{
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = authenticationSettings.Authority;
+            options.Audience = string.IsNullOrWhiteSpace(authenticationSettings.Audience) ? null : authenticationSettings.Audience;
+            options.RequireHttpsMetadata = authenticationSettings.RequireHttpsMetadata;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                NameClaimType = authenticationSettings.NameClaimType ?? ClaimTypes.NameIdentifier,
+                RoleClaimType = authenticationSettings.RoleClaimType ?? ClaimTypes.Role,
+                ValidateAudience = !string.IsNullOrWhiteSpace(authenticationSettings.Audience)
+            };
+        });
+
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy(AuthorizationPolicies.Admin, policy => policy.RequireRole(authenticationSettings.AdminRole));
+    });
+}
+else
+{
+    builder.Services.AddAuthorization(options =>
+    {
+        options.AddPolicy(AuthorizationPolicies.Admin, policy => policy.RequireAssertion(_ => true));
+    });
+}
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? "Host=localhost;Port=5432;Database=nabteams;Username=nabteams;Password=nabteams";
+
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseNpgsql(connectionString));
+builder.Services.AddDbContextFactory<ApplicationDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+builder.Services.AddScoped<IChatRepository, EfChatRepository>();
+builder.Services.AddScoped<IModerationLogStore, EfModerationLogStore>();
+builder.Services.AddScoped<IUserDisciplineStore, EfUserDisciplineStore>();
+builder.Services.AddScoped<IAppealStore, EfAppealStore>();
+builder.Services.AddScoped<IParticipantRegistrationStore, EfParticipantRegistrationStore>();
+builder.Services.AddScoped<IJudgeRegistrationStore, EfJudgeRegistrationStore>();
+builder.Services.AddScoped<IInvestorRegistrationStore, EfInvestorRegistrationStore>();
+builder.Services.AddScoped<IProjectWorkspaceStore, EfProjectWorkspaceStore>();
+builder.Services.AddScoped<IPostApprovalStore, EfPostApprovalStore>();
+builder.Services.AddSingleton<IRateLimiter, SlidingWindowRateLimiter>();
+builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
+builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
+builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
+builder.Services.AddScoped<ISupportResponder, SupportResponder>();
+builder.Services.AddHostedService<ChatModerationWorker>();
+builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();
+
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database")
+    .AddCheck<GeminiHealthCheck>("gemini");
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("frontend", policy =>
+        policy.WithOrigins("http://localhost:3000")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials());
+});
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("NabTeams.Api"))
+    .WithMetrics(metrics =>
+    {
+        metrics.AddAspNetCoreInstrumentation();
+        metrics.AddHttpClientInstrumentation();
+        metrics.AddMeter(MetricsRecorder.MeterName);
+        metrics.AddPrometheusExporter();
+    });
+
+var app = builder.Build();
+
+await DatabaseInitializer.InitializeAsync(app.Services);
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseForwardedHeaders();
+app.UseHttpLogging();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseResponseCompression();
+app.UseSecurityHeaders();
+
+app.UseRouting();
+app.UseCors("frontend");
+
+if (!authenticationSettings.Disabled)
+{
+    app.UseAuthentication();
+}
+else
+{
+    app.Use(async (context, next) =>
+    {
+        if (context.User?.Identity?.IsAuthenticated != true)
+        {
+            var debugUser = context.Request.Headers["X-Debug-User"].FirstOrDefault()
+                ?? context.Request.Query["debug_user"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(debugUser))
+            {
+                var identity = new ClaimsIdentity("Debug");
+                identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, debugUser));
+                identity.AddClaim(new Claim("sub", debugUser));
+                identity.AddClaim(new Claim(ClaimTypes.Name, debugUser));
+
+                var debugEmail = context.Request.Headers["X-Debug-Email"].FirstOrDefault()
+                    ?? context.Request.Query["debug_email"].FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(debugEmail))
+                {
+                    identity.AddClaim(new Claim(ClaimTypes.Email, debugEmail));
+                }
+
+                var rolesHeader = context.Request.Headers["X-Debug-Roles"].FirstOrDefault()
+                    ?? context.Request.Query["debug_roles"].FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(rolesHeader))
+                {
+                    var roles = rolesHeader.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    foreach (var role in roles)
+                    {
+                        identity.AddClaim(new Claim(ClaimTypes.Role, role));
+                        identity.AddClaim(new Claim("role", role));
+                        identity.AddClaim(new Claim("roles", role));
+                    }
+                }
+
+                context.User = new ClaimsPrincipal(identity);
+            }
+        }
+
+        await next();
+    });
+}
+
+app.UseAuthorization();
+app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
+app.MapPrometheusScrapingEndpoint();
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var payload = new
+        {
+            status = report.Status.ToString(),
+            results = report.Entries.Select(entry => new
+            {
+                name = entry.Key,
+                status = entry.Value.Status.ToString(),
+                description = entry.Value.Description,
+                error = entry.Value.Exception?.Message
+            })
+        };
+
+        await context.Response.WriteAsync(JsonSerializer.Serialize(payload));
+    }
+});
+
+app.Run();
+
+static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy() =>
+    HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(response => response.StatusCode == HttpStatusCode.TooManyRequests)
+        .WaitAndRetryAsync(3, attempt => TimeSpan.FromMilliseconds(200 * attempt));
+
+static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy() =>
+    HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));
