@@ -45,6 +45,10 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 | `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_SCOPE` | فرانت‌اند   | تنظیمات ارائه‌دهنده OIDC برای NextAuth. اگر مقداردهی نشود و `AUTH_ALLOW_DEV=true` باشد، ورود آزمایشی فعال می‌شود. |
 | `AUTH_ALLOW_DEV`                                                | فرانت‌اند   | در صورت `true` (پیش‌فرض)، Provider ورود آزمایشی (Credentials) فعال می‌شود.                                        |
 | `NEXT_PUBLIC_API_URL`                                           | فرانت‌اند   | آدرس سرویس بک‌اند (پیش‌فرض `http://localhost:5000`).                                                              |
+| `FileStorage__RootPath`                                         | بک‌اند      | مسیر ذخیره فایل‌های بارگذاری‌شده ثبت‌نام. اگر نسبی باشد نسبت به ریشه پروژه وب تفسیر می‌شود (پیش‌فرض: `storage/uploads`). |
+| `FileStorage__PublicBaseUrl`                                    | بک‌اند      | آدرس پایه قابل‌دسترسی برای فایل‌های آپلود شده (مثلاً `/uploads` یا URL کامل CDN).                                 |
+
+> **نکته:** پس از ورود به سیستم با نقش ادمین، می‌توانید مقادیر مربوط به Gemini، درگاه پرداخت، SMTP و پنل پیامکی را از مسیر `/dashboard/admin/integrations` وارد یا ویرایش کنید؛ در این صورت مقادیر جدول بالا به‌عنوان مقدار پیش‌فرض عمل کرده و در زمان اجرا با داده‌های پایگاه‌داده جایگزین می‌شوند.
 
 > **نکته:** پس از ورود به سیستم با نقش ادمین، می‌توانید مقادیر مربوط به Gemini، درگاه پرداخت، SMTP و پنل پیامکی را از مسیر `/dashboard/admin/integrations` وارد یا ویرایش کنید؛ در این صورت مقادیر جدول بالا به‌عنوان مقدار پیش‌فرض عمل کرده و در زمان اجرا با داده‌های پایگاه‌داده جایگزین می‌شوند. همچنین می‌توانید وضعیت اجرای چک‌لیست امنیت/عملیات را از مسیر `/dashboard/admin/operations` به‌روزرسانی و مستند کنید تا پیش‌نیازهای انتشار دنبال شود. در محیط‌های تولیدی می‌توان مقدار JSON هر سرویس را در متغیرهای `INTEGRATIONS__*` قرار داد تا هنگام راه‌اندازی به صورت خودکار در پایگاه‌داده ذخیره و فعال شود؛ مثال برای Gemini:
 > ```json
@@ -93,6 +97,7 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 - `POST /api/registrations/participants/{id}/analysis` — ارسال طرح کسب‌وکار برای تحلیل هوش مصنوعی و دریافت امتیاز و پیشنهادها.
 - `GET /api/registrations/participants/{id}/analysis` — فهرست تحلیل‌های انجام‌شده برای تیم.
 - `POST /api/support/query` — پاسخ دانشی (RAG) با Gemini.
+- `POST /api/registrations/participants/uploads` — بارگذاری مدارک ثبت‌نام و دریافت لینک قابل‌دانلود.
 - `GET/POST/DELETE /api/knowledge-base` — مدیریت منابع دانش توسط ادمین.
 - `GET /api/moderation/{role}/logs` — مشاهده لاگ‌های پایش (ادمین).
 - `GET /api/admin/operations-checklist` و `PUT /api/admin/operations-checklist/{id}` — مشاهده و بروزرسانی وضعیت چک‌لیست امنیت و عملیات.
