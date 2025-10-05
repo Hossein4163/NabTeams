@@ -9,7 +9,8 @@ import {
   ParticipantTeamMemberInput,
   RegistrationDocumentCategory,
   RegistrationLinkType,
-  submitParticipantRegistration
+  submitParticipantRegistration,
+  uploadParticipantDocument
 } from '../../../lib/api';
 
 const stepLabels = [
@@ -58,6 +59,9 @@ const linkTypeOptions: Array<{ value: RegistrationLinkType; label: string }> = [
   { value: 'Other', label: 'سایر' }
 ];
 
+const allowedDocumentExtensionsLabel = 'PDF، ZIP، PPT، PPTX، DOC، DOCX، XLS، XLSX، PNG، JPG';
+const maxDocumentSizeMb = 25;
+
 function cleanupObjectUrl(url: string) {
   if (typeof url === 'string' && url.startsWith('blob:')) {
     URL.revokeObjectURL(url);
@@ -96,6 +100,7 @@ export default function ParticipantRegistrationPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ParticipantRegistrationResponse | null>(null);
+  const [uploadingDocumentIndex, setUploadingDocumentIndex] = useState<number | null>(null);
 
   const filteredMembers = useMemo(() => {
     if (!form.hasTeam) {
@@ -165,6 +170,7 @@ export default function ParticipantRegistrationPage() {
   }
 
   function removeDocument(index: number) {
+    setUploadingDocumentIndex((current) => (current === index ? null : current));
     setForm((prev) => {
       const target = prev.documents[index];
       if (target?.fileUrl) {
@@ -177,23 +183,43 @@ export default function ParticipantRegistrationPage() {
     });
   }
 
-  function handleDocumentFile(index: number, file: File | null) {
+  async function handleDocumentFile(index: number, file: File | null) {
     if (!file) {
       return;
     }
-    setForm((prev) => {
-      const target = prev.documents[index];
-      if (!target) {
-        return prev;
+
+    setError(null);
+    setUploadingDocumentIndex(index);
+    try {
+      const upload = await uploadParticipantDocument(file);
+      setForm((prev) => {
+        const target = prev.documents[index];
+        if (!target) {
+          return prev;
+        }
+        if (target.fileUrl) {
+          cleanupObjectUrl(target.fileUrl);
+        }
+        const nextDocuments = prev.documents.map((doc, idx) =>
+          idx === index
+            ? {
+                ...doc,
+                fileName: upload.fileName || file.name,
+                fileUrl: upload.fileUrl
+              }
+            : doc
+        );
+        return { ...prev, documents: nextDocuments };
+      });
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('بارگذاری فایل ناموفق بود.');
       }
-      if (target.fileUrl) {
-        cleanupObjectUrl(target.fileUrl);
-      }
-      const nextDocuments = prev.documents.map((doc, idx) =>
-        idx === index ? { ...doc, fileName: file.name, fileUrl: URL.createObjectURL(file) } : doc
-      );
-      return { ...prev, documents: nextDocuments };
-    });
+    } finally {
+      setUploadingDocumentIndex(null);
+    }
   }
 
   function updateLink(index: number, key: keyof LinkDraft, value: string) {
@@ -276,6 +302,10 @@ export default function ParticipantRegistrationPage() {
   }
 
   async function handleNext() {
+    if (uploadingDocumentIndex !== null) {
+      setError('لطفاً تا پایان بارگذاری فایل منتظر بمانید.');
+      return;
+    }
     if (!validateStep(step)) {
       return;
     }
@@ -288,6 +318,10 @@ export default function ParticipantRegistrationPage() {
   }
 
   async function handleSubmit() {
+    if (uploadingDocumentIndex !== null) {
+      setError('لطفاً تا پایان بارگذاری فایل منتظر بمانید.');
+      return;
+    }
     if (!validateStep(step)) {
       return;
     }
@@ -347,6 +381,7 @@ export default function ParticipantRegistrationPage() {
     setResult(null);
     setError(null);
     setStep(0);
+    setUploadingDocumentIndex(null);
   }
 
   if (result) {
@@ -608,7 +643,8 @@ export default function ParticipantRegistrationPage() {
                     <button
                       type="button"
                       onClick={() => removeDocument(index)}
-                      className="text-xs text-red-300 transition hover:text-red-200"
+                      disabled={uploadingDocumentIndex === index}
+                      className="text-xs text-red-300 transition hover:text-red-200 disabled:opacity-50"
                     >
                       حذف فایل
                     </button>
@@ -634,10 +670,21 @@ export default function ParticipantRegistrationPage() {
                       <label className="block">انتخاب فایل (اختیاری)</label>
                       <input
                         type="file"
-                        className="mt-1 w-full text-xs text-slate-200"
-                        onChange={(event) => handleDocumentFile(index, event.target.files?.[0] ?? null)}
+                        className="mt-1 w-full text-xs text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={uploadingDocumentIndex !== null}
+                        onChange={async (event) => {
+                          const selectedFile = event.target.files?.[0] ?? null;
+                          await handleDocumentFile(index, selectedFile);
+                          event.target.value = '';
+                        }}
                       />
-                      <p className="mt-1 text-xs text-slate-500">در محیط آزمایشی، فایل به صورت محلی ثبت می‌شود.</p>
+                      {uploadingDocumentIndex === index ? (
+                        <p className="mt-1 text-xs text-emerald-300">در حال بارگذاری فایل...</p>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-500">
+                          فرمت‌های مجاز: {allowedDocumentExtensionsLabel}. حداکثر حجم هر فایل {maxDocumentSizeMb} مگابایت است.
+                        </p>
+                      )}
                     </div>
                     <TextField
                       label="نام فایل"

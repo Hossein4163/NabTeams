@@ -31,6 +31,8 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 | `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_SCOPE` | فرانت‌اند   | تنظیمات ارائه‌دهنده OIDC برای NextAuth. اگر مقداردهی نشود و `AUTH_ALLOW_DEV=true` باشد، ورود آزمایشی فعال می‌شود. |
 | `AUTH_ALLOW_DEV`                                                | فرانت‌اند   | در صورت `true` (پیش‌فرض)، Provider ورود آزمایشی (Credentials) فعال می‌شود.                                        |
 | `NEXT_PUBLIC_API_URL`                                           | فرانت‌اند   | آدرس سرویس بک‌اند (پیش‌فرض `http://localhost:5000`).                                                              |
+| `FileStorage__RootPath`                                         | بک‌اند      | مسیر ذخیره فایل‌های بارگذاری‌شده ثبت‌نام. اگر نسبی باشد نسبت به ریشه پروژه وب تفسیر می‌شود (پیش‌فرض: `storage/uploads`). |
+| `FileStorage__PublicBaseUrl`                                    | بک‌اند      | آدرس پایه قابل‌دسترسی برای فایل‌های آپلود شده (مثلاً `/uploads` یا URL کامل CDN).                                 |
 
 ## راه‌اندازی بک‌اند
 
@@ -44,12 +46,13 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
    cd backend/NabTeams/src/Web
    dotnet ef database update
    ```
-4. اجرای سرویس:
+4. (اختیاری) مسیر ذخیره فایل مدارک را مطابق نیاز تنظیم کنید. مقدار پیش‌فرض `storage/uploads` است و در اولین اجرا به صورت خودکار ایجاد می‌شود. در صورت استفاده از CDN یا مسیر سفارشی، مقادیر `FileStorage__RootPath` و `FileStorage__PublicBaseUrl` را قبل از اجرای سرویس تعیین کنید.
+5. اجرای سرویس:
    ```bash
    dotnet restore
    dotnet run --urls http://localhost:5000
    ```
-5. اولین اجرا مهاجرت EF Core را اعمال و منابع اولیهٔ دانش و ثبت‌نام را Seed می‌کند. مستندات Swagger در `http://localhost:5000/swagger` در دسترس است.
+6. اولین اجرا مهاجرت EF Core را اعمال و منابع اولیهٔ دانش و ثبت‌نام را Seed می‌کند. مستندات Swagger در `http://localhost:5000/swagger` در دسترس است. فایل‌های بارگذاری‌شده از مسیر `http://localhost:5000/uploads/<file>` قابل دریافت هستند.
 
 ### مهم‌ترین APIها
 
@@ -60,6 +63,7 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 - `GET /api/appeals` — فهرست اعتراض‌های کاربر.
 - `GET /api/appeals/admin` و `POST /api/appeals/{id}/decision` — بررسی و تصمیم‌گیری توسط ادمین.
 - `POST /api/support/query` — پاسخ دانشی (RAG) با Gemini.
+- `POST /api/registrations/participants/uploads` — بارگذاری مدارک ثبت‌نام و دریافت لینک قابل‌دانلود.
 - `GET/POST/DELETE /api/knowledge-base` — مدیریت منابع دانش توسط ادمین.
 - `GET /api/moderation/{role}/logs` — مشاهده لاگ‌های پایش (ادمین).
 - `GET /health/live` — بررسی زنده بودن سرویس (بدون وابستگی به زیرساخت).
