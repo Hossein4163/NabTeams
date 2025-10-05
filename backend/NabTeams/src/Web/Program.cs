@@ -297,6 +297,8 @@ app.UseStaticFiles();
 
 app.UseStaticFiles();
 
+app.UseStaticFiles();
+
 app.UseRouting();
 app.UseCors("frontend");
 
