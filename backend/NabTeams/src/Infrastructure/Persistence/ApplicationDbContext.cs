@@ -123,6 +123,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.FieldOfStudy).HasMaxLength(128).IsRequired();
             entity.Property(e => e.TeamName).HasMaxLength(128).IsRequired();
             entity.Property(e => e.AdditionalNotes).HasMaxLength(1024);
+            entity.Property(e => e.SubmittedAt).IsRequired();
 
             entity.HasMany(e => e.Members)
                 .WithOne(e => e.ParticipantRegistration)
@@ -175,6 +176,7 @@ public class ApplicationDbContext : DbContext
             entity.Property(e => e.FieldOfExpertise).HasMaxLength(256).IsRequired();
             entity.Property(e => e.HighestDegree).HasMaxLength(128).IsRequired();
             entity.Property(e => e.Biography).HasMaxLength(1024);
+            entity.Property(e => e.SubmittedAt).IsRequired();
         });
 
         modelBuilder.Entity<InvestorRegistrationEntity>(entity =>
@@ -193,6 +195,7 @@ public class ApplicationDbContext : DbContext
                         : value.Split('\u001F', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList())
                 .Metadata.SetValueComparer(stringListComparer);
             entity.Property(e => e.AdditionalNotes).HasMaxLength(1024);
+            entity.Property(e => e.SubmittedAt).IsRequired();
         });
     }
 }

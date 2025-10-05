@@ -39,13 +39,17 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
    ```bash
    docker run --name nabteams-postgres -e POSTGRES_PASSWORD=nabteams -e POSTGRES_USER=nabteams -e POSTGRES_DB=nabteams -p 5432:5432 -d postgres:15
    ```
-3. اجرای سرویس:
+3. اعمال مایگریشن‌های EF Core (یک بار برای هر محیط):
    ```bash
-   cd backend/src/Web
+   cd backend/NabTeams/src/Web
+   dotnet ef database update
+   ```
+4. اجرای سرویس:
+   ```bash
    dotnet restore
    dotnet run --urls http://localhost:5000
    ```
-4. اولین اجرا مهاجرت EF Core را اعمال و منابع اولیهٔ دانش را Seed می‌کند. مستندات Swagger در `http://localhost:5000/swagger` در دسترس است.
+5. اولین اجرا مهاجرت EF Core را اعمال و منابع اولیهٔ دانش و ثبت‌نام را Seed می‌کند. مستندات Swagger در `http://localhost:5000/swagger` در دسترس است.
 
 ### مهم‌ترین APIها
 
