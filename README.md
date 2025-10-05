@@ -108,6 +108,20 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 > }
 > ```
 
+> **نکته:** پس از ورود به سیستم با نقش ادمین، می‌توانید مقادیر مربوط به Gemini، درگاه پرداخت، SMTP و پنل پیامکی را از مسیر `/dashboard/admin/integrations` وارد یا ویرایش کنید؛ در این صورت مقادیر جدول بالا به‌عنوان مقدار پیش‌فرض عمل کرده و در زمان اجرا با داده‌های پایگاه‌داده جایگزین می‌شوند. همچنین می‌توانید وضعیت اجرای چک‌لیست امنیت/عملیات را از مسیر `/dashboard/admin/operations` به‌روزرسانی و مستند کنید تا پیش‌نیازهای انتشار دنبال شود. در محیط‌های تولیدی می‌توان مقدار JSON هر سرویس را در متغیرهای `INTEGRATIONS__*` قرار داد تا هنگام راه‌اندازی به صورت خودکار در پایگاه‌داده ذخیره و فعال شود؛ مثال برای Gemini:
+> ```json
+> {
+>   "providerKey": "gemini",
+>   "displayName": "Google Gemini Production",
+>   "configuration": {
+>     "ApiKey": "prod-key",
+>     "BaseUrl": "https://generativelanguage.googleapis.com",
+>     "BusinessPlanModel": "gemini-1.5-pro"
+>   },
+>   "isActive": true
+> }
+> ```
+
 ## راه‌اندازی بک‌اند
 
 1. پیش‌نیازها: [Docker اختیاری برای PostgreSQL]، [.NET 8 SDK](https://dotnet.microsoft.com/download)، و سرویس PostgreSQL در حال اجرا.
