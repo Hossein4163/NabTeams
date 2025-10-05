@@ -9,13 +9,19 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
+using Microsoft.OpenApi.Models;
 using OpenTelemetry.Exporter.Prometheus.AspNetCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using Polly;
 using Polly.Extensions.Http;
 using NabTeams.Application.Abstractions;
+using NabTeams.Application.Auditing;
 using NabTeams.Application.Common;
+using NabTeams.Application.Integrations;
+using NabTeams.Application.Operations;
+using NabTeams.Application.Registrations;
 using NabTeams.Infrastructure.HealthChecks;
 using NabTeams.Infrastructure.Monitoring;
 using NabTeams.Infrastructure.Persistence;
@@ -25,12 +31,22 @@ using NabTeams.Web.Background;
 using NabTeams.Web.Configuration;
 using NabTeams.Web.Hubs;
 using NabTeams.Web.Middleware;
+using Swashbuckle.AspNetCore.Annotations;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "NabTeams API",
+        Version = "v1",
+        Description = "پوشش‌دهندهٔ سرویس‌های چت، پشتیبانی و ثبت‌نام شرکت‌کنندگان، داوران و سرمایه‌گذاران."
+    });
+    options.EnableAnnotations();
+});
 builder.Services.AddSignalR();
 builder.Services.AddResponseCompression(options =>
 {
@@ -58,12 +74,58 @@ builder.Services.AddHttpLogging(logging =>
 
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSection("Authentication"));
+builder.Services.Configure<PaymentGatewayOptions>(builder.Configuration.GetSection("Payments"));
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection("Notification"));
 var authenticationSettings = builder.Configuration.GetSection("Authentication").Get<AuthenticationSettings>() ?? new AuthenticationSettings { Disabled = true };
 
-builder.Services.AddHttpClient("gemini", client =>
+builder.Services.AddHttpClient<GeminiBusinessPlanAnalyzer>((sp, client) =>
     {
-        var options = builder.Configuration.GetSection("Gemini").Get<GeminiOptions>() ?? new GeminiOptions();
-        client.BaseAddress = new Uri(options.Endpoint.TrimEnd('/') + "/");
+        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+            ? "https://generativelanguage.googleapis.com"
+            : options.BaseUrl.TrimEnd('/');
+        client.BaseAddress = new Uri(baseUrl + "/");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        client.Timeout = TimeSpan.FromSeconds(20);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+builder.Services.AddHttpClient<IdPayPaymentGateway>((sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<PaymentGatewayOptions>>().Value;
+        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+            ? "https://api.idpay.ir"
+            : options.BaseUrl.TrimEnd('/');
+        client.BaseAddress = new Uri(baseUrl + "/");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        client.Timeout = TimeSpan.FromSeconds(20);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+builder.Services.AddHttpClient("notifications.sms", (sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<NotificationOptions>>().Value;
+        if (!string.IsNullOrWhiteSpace(options.Sms.BaseUrl))
+        {
+            client.BaseAddress = new Uri(options.Sms.BaseUrl.TrimEnd('/') + "/");
+        }
+        client.Timeout = TimeSpan.FromSeconds(10);
+    })
+    .SetHandlerLifetime(TimeSpan.FromMinutes(5))
+    .AddPolicyHandler(GetRetryPolicy())
+    .AddPolicyHandler(GetCircuitBreakerPolicy());
+
+builder.Services.AddHttpClient("gemini", (sp, client) =>
+    {
+        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;
+        var endpoint = string.IsNullOrWhiteSpace(options.Endpoint)
+            ? "https://generativelanguage.googleapis.com/v1beta"
+            : options.Endpoint.TrimEnd('/');
+        client.BaseAddress = new Uri(endpoint + "/");
         client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         client.Timeout = TimeSpan.FromSeconds(15);
     })
@@ -116,6 +178,19 @@ builder.Services.AddSingleton<IRateLimiter, SlidingWindowRateLimiter>();
 builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
 builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
+builder.Services.AddScoped<IOperationsChecklistRepository, EfOperationsChecklistRepository>();
+builder.Services.AddScoped<IIntegrationSettingsRepository, EfIntegrationSettingsRepository>();
+builder.Services.AddScoped<IIntegrationSettingsService, IntegrationSettingsService>();
+builder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();
+builder.Services.AddSingleton<IRegistrationSummaryBuilder, RegistrationSummaryBuilder>();
+builder.Services.AddScoped<INotificationService, ExternalNotificationService>();
+builder.Services.AddScoped<IPaymentGateway>(sp => sp.GetRequiredService<IdPayPaymentGateway>());
+builder.Services.AddScoped<IBusinessPlanAnalyzer>(sp => sp.GetRequiredService<GeminiBusinessPlanAnalyzer>());
+builder.Services.AddScoped<IRegistrationWorkflowService, RegistrationWorkflowService>();
+builder.Services.AddScoped<IOperationsChecklistService, OperationsChecklistService>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
 builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();
@@ -163,6 +238,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseResponseCompression();
 app.UseSecurityHeaders();
+
+app.UseStaticFiles();
 
 app.UseRouting();
 app.UseCors("frontend");
