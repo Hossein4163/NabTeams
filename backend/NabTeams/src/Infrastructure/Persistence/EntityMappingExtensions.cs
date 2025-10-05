@@ -1,9 +1,85 @@
 using NabTeams.Domain.Entities;
+using NabTeams.Domain.Enums;
+using System.Collections.Generic;
+using System.Linq;
+using System;
 
 namespace NabTeams.Infrastructure.Persistence;
 
 public static class EntityMappingExtensions
 {
+    public static EventSummary ToSummary(this EventEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            Description = entity.Description,
+            StartsAt = entity.StartsAt,
+            EndsAt = entity.EndsAt,
+            AiTaskManagerEnabled = entity.AiTaskManagerEnabled
+        };
+
+    public static EventDetail ToDetail(this EventEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            Name = entity.Name,
+            Description = entity.Description,
+            StartsAt = entity.StartsAt,
+            EndsAt = entity.EndsAt,
+            AiTaskManagerEnabled = entity.AiTaskManagerEnabled,
+            SampleTasks = (entity.Tasks ?? new List<ParticipantTaskEntity>())
+                .OrderBy(t => t.DueAt ?? DateTimeOffset.MaxValue)
+                .ThenBy(t => t.CreatedAt)
+                .Take(5)
+                .Select(t => t.ToModel())
+                .ToList()
+        };
+
+    public static EventEntity ToEntity(this EventDetail detail)
+        => new()
+        {
+            Id = detail.Id,
+            Name = detail.Name,
+            Description = detail.Description,
+            StartsAt = detail.StartsAt,
+            EndsAt = detail.EndsAt,
+            AiTaskManagerEnabled = detail.AiTaskManagerEnabled,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+    public static ParticipantTask ToModel(this ParticipantTaskEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            ParticipantRegistrationId = entity.ParticipantRegistrationId,
+            EventId = entity.EventId,
+            Title = entity.Title,
+            Description = entity.Description,
+            Status = entity.Status,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+            DueAt = entity.DueAt,
+            AssignedTo = entity.AssignedTo,
+            AiRecommendation = entity.AiRecommendation
+        };
+
+    public static ParticipantTaskEntity ToEntity(this ParticipantTask model)
+        => new()
+        {
+            Id = model.Id,
+            ParticipantRegistrationId = model.ParticipantRegistrationId,
+            EventId = model.EventId,
+            Title = model.Title,
+            Description = model.Description,
+            Status = model.Status,
+            CreatedAt = model.CreatedAt,
+            UpdatedAt = model.UpdatedAt,
+            DueAt = model.DueAt,
+            AssignedTo = model.AssignedTo,
+            AiRecommendation = model.AiRecommendation
+        };
+
     public static Message ToModel(this MessageEntity entity)
         => new()
         {
@@ -135,5 +211,383 @@ public static class EntityMappingExtensions
             ResolutionNotes = model.ResolutionNotes,
             ReviewedBy = model.ReviewedBy,
             ReviewedAt = model.ReviewedAt
+        };
+
+    public static ParticipantRegistration ToModel(this ParticipantRegistrationEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            HeadFirstName = entity.HeadFirstName,
+            HeadLastName = entity.HeadLastName,
+            NationalId = entity.NationalId,
+            PhoneNumber = entity.PhoneNumber,
+            Email = entity.Email,
+            BirthDate = entity.BirthDate,
+            EducationDegree = entity.EducationDegree,
+            FieldOfStudy = entity.FieldOfStudy,
+            TeamName = entity.TeamName,
+            EventId = entity.EventId,
+            Event = entity.Event?.ToSummary(),
+            HasTeam = entity.HasTeam,
+            TeamCompleted = entity.TeamCompleted,
+            AdditionalNotes = entity.AdditionalNotes,
+            Status = entity.Status,
+            FinalizedAt = entity.FinalizedAt,
+            SummaryFileUrl = entity.SummaryFileUrl,
+            SubmittedAt = entity.SubmittedAt,
+            Members = (entity.Members ?? new List<TeamMemberEntity>())
+                .OrderBy(m => m.FullName)
+                .Select(m => new TeamMember
+                {
+                    Id = m.Id,
+                    FullName = m.FullName,
+                    Role = m.Role,
+                    FocusArea = m.FocusArea
+                })
+                .ToList(),
+            Documents = (entity.Documents ?? new List<RegistrationDocumentEntity>())
+                .Select(d => new RegistrationDocument
+                {
+                    Id = d.Id,
+                    Category = d.Category,
+                    FileName = d.FileName,
+                    FileUrl = d.FileUrl
+                })
+                .ToList(),
+            Links = (entity.Links ?? new List<RegistrationLinkEntity>())
+                .Select(l => new RegistrationLink
+                {
+                    Id = l.Id,
+                    Type = l.Type,
+                    Label = l.Label,
+                    Url = l.Url
+                })
+                .ToList(),
+            Payment = entity.Payment?.ToModel(),
+            Notifications = (entity.Notifications ?? new List<RegistrationNotificationEntity>())
+                .OrderByDescending(n => n.SentAt)
+                .Select(n => n.ToModel())
+                .ToList(),
+            BusinessPlanReviews = (entity.BusinessPlanReviews ?? new List<BusinessPlanReviewEntity>())
+                .OrderByDescending(r => r.CreatedAt)
+                .Select(r => r.ToModel())
+                .ToList(),
+            Tasks = (entity.Tasks ?? new List<ParticipantTaskEntity>())
+                .OrderBy(t => t.DueAt ?? DateTimeOffset.MaxValue)
+                .ThenBy(t => t.CreatedAt)
+                .Select(t => t.ToModel())
+                .ToList()
+        };
+
+    public static IntegrationSetting ToModel(this IntegrationSettingEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            Type = entity.Type,
+            ProviderKey = entity.ProviderKey,
+            DisplayName = entity.DisplayName,
+            Configuration = entity.Configuration,
+            IsActive = entity.IsActive,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt
+        };
+
+    public static IntegrationSettingEntity ToEntity(this IntegrationSetting model)
+        => new()
+        {
+            Id = model.Id,
+            Type = model.Type,
+            ProviderKey = model.ProviderKey,
+            DisplayName = model.DisplayName,
+            Configuration = model.Configuration,
+            IsActive = model.IsActive,
+            CreatedAt = model.CreatedAt,
+            UpdatedAt = model.UpdatedAt
+        };
+
+    public static ParticipantRegistrationEntity ToEntity(this ParticipantRegistration model)
+    {
+        var entity = new ParticipantRegistrationEntity
+        {
+            Id = model.Id,
+            HeadFirstName = model.HeadFirstName,
+            HeadLastName = model.HeadLastName,
+            NationalId = model.NationalId,
+            PhoneNumber = model.PhoneNumber,
+            Email = model.Email,
+            BirthDate = model.BirthDate,
+            EducationDegree = model.EducationDegree,
+            FieldOfStudy = model.FieldOfStudy,
+            TeamName = model.TeamName,
+            EventId = model.EventId,
+            HasTeam = model.HasTeam,
+            TeamCompleted = model.TeamCompleted,
+            AdditionalNotes = model.AdditionalNotes,
+            Status = model.Status,
+            FinalizedAt = model.FinalizedAt,
+            SummaryFileUrl = model.SummaryFileUrl,
+            SubmittedAt = model.SubmittedAt
+        };
+
+        entity.UpdateCollections(model);
+        if (model.Payment is not null)
+        {
+            entity.Payment = model.Payment.ToEntity();
+            entity.Payment.ParticipantRegistrationId = entity.Id;
+        }
+
+        entity.Notifications = model.Notifications
+            .Select(n =>
+            {
+                var notificationEntity = n.ToEntity();
+                notificationEntity.ParticipantRegistrationId = entity.Id;
+                return notificationEntity;
+            })
+            .ToList();
+
+        entity.BusinessPlanReviews = model.BusinessPlanReviews
+            .Select(r =>
+            {
+                var reviewEntity = r.ToEntity();
+                reviewEntity.ParticipantRegistrationId = entity.Id;
+                return reviewEntity;
+            })
+            .ToList();
+
+        entity.Tasks = model.Tasks
+            .Select(t =>
+            {
+                var taskEntity = t.ToEntity();
+                taskEntity.ParticipantRegistrationId = entity.Id;
+                taskEntity.EventId = model.EventId;
+                return taskEntity;
+            })
+            .ToList();
+
+        return entity;
+    }
+
+    public static void UpdateCollections(this ParticipantRegistrationEntity entity, ParticipantRegistration model)
+    {
+        entity.Members = model.Members
+            .Select(m => new TeamMemberEntity
+            {
+                Id = m.Id,
+                ParticipantRegistrationId = entity.Id,
+                FullName = m.FullName,
+                Role = m.Role,
+                FocusArea = m.FocusArea
+            })
+            .ToList();
+
+        entity.Documents = model.Documents
+            .Select(d => new RegistrationDocumentEntity
+            {
+                Id = d.Id,
+                ParticipantRegistrationId = entity.Id,
+                Category = d.Category,
+                FileName = d.FileName,
+                FileUrl = d.FileUrl
+            })
+            .ToList();
+
+        entity.Links = model.Links
+            .Select(l => new RegistrationLinkEntity
+            {
+                Id = l.Id,
+                ParticipantRegistrationId = entity.Id,
+                Type = l.Type,
+                Label = l.Label,
+                Url = l.Url
+            })
+            .ToList();
+
+        if (model.Payment is not null)
+        {
+            entity.Payment = model.Payment.ToEntity();
+            entity.Payment.ParticipantRegistrationId = entity.Id;
+        }
+
+        entity.Notifications = model.Notifications
+            .Select(n =>
+            {
+                var notificationEntity = n.ToEntity();
+                notificationEntity.ParticipantRegistrationId = entity.Id;
+                return notificationEntity;
+            })
+            .ToList();
+
+        entity.BusinessPlanReviews = model.BusinessPlanReviews
+            .Select(r =>
+            {
+                var reviewEntity = r.ToEntity();
+                reviewEntity.ParticipantRegistrationId = entity.Id;
+                return reviewEntity;
+            })
+            .ToList();
+
+        entity.Tasks = model.Tasks
+            .Select(t =>
+            {
+                var taskEntity = t.ToEntity();
+                taskEntity.ParticipantRegistrationId = entity.Id;
+                taskEntity.EventId = model.EventId;
+                return taskEntity;
+            })
+            .ToList();
+    }
+
+    public static RegistrationPayment ToModel(this RegistrationPaymentEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            ParticipantRegistrationId = entity.ParticipantRegistrationId,
+            Amount = entity.Amount,
+            Currency = entity.Currency,
+            PaymentUrl = entity.PaymentUrl,
+            Status = entity.Status,
+            RequestedAt = entity.RequestedAt,
+            CompletedAt = entity.CompletedAt,
+            GatewayReference = entity.GatewayReference
+        };
+
+    public static RegistrationPaymentEntity ToEntity(this RegistrationPayment model)
+        => new()
+        {
+            Id = model.Id,
+            ParticipantRegistrationId = model.ParticipantRegistrationId,
+            Amount = model.Amount,
+            Currency = model.Currency,
+            PaymentUrl = model.PaymentUrl,
+            Status = model.Status,
+            RequestedAt = model.RequestedAt,
+            CompletedAt = model.CompletedAt,
+            GatewayReference = model.GatewayReference
+        };
+
+    public static RegistrationNotification ToModel(this RegistrationNotificationEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            ParticipantRegistrationId = entity.ParticipantRegistrationId,
+            Channel = entity.Channel,
+            Recipient = entity.Recipient,
+            Subject = entity.Subject,
+            Message = entity.Message,
+            SentAt = entity.SentAt
+        };
+
+    public static RegistrationNotificationEntity ToEntity(this RegistrationNotification model)
+        => new()
+        {
+            Id = model.Id,
+            ParticipantRegistrationId = model.ParticipantRegistrationId,
+            Channel = model.Channel,
+            Recipient = model.Recipient,
+            Subject = model.Subject,
+            Message = model.Message,
+            SentAt = model.SentAt
+        };
+
+    public static BusinessPlanReview ToModel(this BusinessPlanReviewEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            ParticipantRegistrationId = entity.ParticipantRegistrationId,
+            Status = entity.Status,
+            OverallScore = entity.OverallScore,
+            Summary = entity.Summary,
+            Strengths = entity.Strengths,
+            Risks = entity.Risks,
+            Recommendations = entity.Recommendations,
+            RawResponse = entity.RawResponse,
+            Model = entity.Model,
+            SourceDocumentUrl = entity.SourceDocumentUrl,
+            CreatedAt = entity.CreatedAt
+        };
+
+    public static BusinessPlanReviewEntity ToEntity(this BusinessPlanReview model)
+        => new()
+        {
+            Id = model.Id,
+            ParticipantRegistrationId = model.ParticipantRegistrationId,
+            Status = model.Status,
+            OverallScore = model.OverallScore,
+            Summary = model.Summary,
+            Strengths = model.Strengths,
+            Risks = model.Risks,
+            Recommendations = model.Recommendations,
+            RawResponse = model.RawResponse,
+            Model = model.Model,
+            SourceDocumentUrl = model.SourceDocumentUrl,
+            CreatedAt = model.CreatedAt
+        };
+
+    public static JudgeRegistration ToModel(this JudgeRegistrationEntity entity)
+            => new()
+        {
+            Id = entity.Id,
+            FirstName = entity.FirstName,
+            LastName = entity.LastName,
+            NationalId = entity.NationalId,
+            PhoneNumber = entity.PhoneNumber,
+            Email = entity.Email,
+            BirthDate = entity.BirthDate,
+            FieldOfExpertise = entity.FieldOfExpertise,
+            HighestDegree = entity.HighestDegree,
+            Biography = entity.Biography,
+            Status = entity.Status,
+            FinalizedAt = entity.FinalizedAt,
+            SubmittedAt = entity.SubmittedAt
+        };
+
+    public static JudgeRegistrationEntity ToEntity(this JudgeRegistration model)
+        => new()
+        {
+            Id = model.Id,
+            FirstName = model.FirstName,
+            LastName = model.LastName,
+            NationalId = model.NationalId,
+            PhoneNumber = model.PhoneNumber,
+            Email = model.Email,
+            BirthDate = model.BirthDate,
+            FieldOfExpertise = model.FieldOfExpertise,
+            HighestDegree = model.HighestDegree,
+            Biography = model.Biography,
+            Status = model.Status,
+            FinalizedAt = model.FinalizedAt,
+            SubmittedAt = model.SubmittedAt
+        };
+
+    public static InvestorRegistration ToModel(this InvestorRegistrationEntity entity)
+        => new()
+        {
+            Id = entity.Id,
+            FirstName = entity.FirstName,
+            LastName = entity.LastName,
+            NationalId = entity.NationalId,
+            PhoneNumber = entity.PhoneNumber,
+            Email = entity.Email,
+            InterestAreas = entity.InterestAreas.ToList(),
+            AdditionalNotes = entity.AdditionalNotes,
+            Status = entity.Status,
+            FinalizedAt = entity.FinalizedAt,
+            SubmittedAt = entity.SubmittedAt
+        };
+
+    public static InvestorRegistrationEntity ToEntity(this InvestorRegistration model)
+        => new()
+        {
+            Id = model.Id,
+            FirstName = model.FirstName,
+            LastName = model.LastName,
+            NationalId = model.NationalId,
+            PhoneNumber = model.PhoneNumber,
+            Email = model.Email,
+            InterestAreas = model.InterestAreas.ToList(),
+            AdditionalNotes = model.AdditionalNotes,
+            Status = model.Status,
+            FinalizedAt = model.FinalizedAt,
+            SubmittedAt = model.SubmittedAt
         };
 }
