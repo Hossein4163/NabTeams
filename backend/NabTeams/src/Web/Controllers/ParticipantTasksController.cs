@@ -25,13 +25,13 @@ public class ParticipantTasksController : ControllerBase
 
     [HttpGet]
     [SwaggerOperation(Summary = "فهرست تسک‌های تیم", Description = "تمامی تسک‌های ثبت‌شده برای تیم شرکت‌کننده را بازمی‌گرداند.")]
-    [ProducesResponseType(typeof(IReadOnlyCollection<ParticipantTaskResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyCollection<ParticipantTaskResponse>>> ListAsync(Guid participantId, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(IReadOnlyCollection<RegistrationsController.ParticipantTaskResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyCollection<RegistrationsController.ParticipantTaskResponse>>> ListAsync(Guid participantId, CancellationToken cancellationToken)
     {
         try
         {
             var tasks = await _taskService.ListAsync(participantId, cancellationToken);
-            return Ok(tasks.Select(ParticipantTaskResponse.FromDomain).ToList());
+            return Ok(tasks.Select(RegistrationsController.ParticipantTaskResponse.FromDomain).ToList());
         }
         catch (InvalidOperationException ex)
         {
@@ -41,13 +41,13 @@ public class ParticipantTasksController : ControllerBase
 
     [HttpPost]
     [SwaggerOperation(Summary = "ایجاد تسک", Description = "تسک جدیدی را برای تیم ثبت می‌کند.")]
-    [ProducesResponseType(typeof(ParticipantTaskResponse), StatusCodes.Status201Created)]
-    public async Task<ActionResult<ParticipantTaskResponse>> CreateAsync(Guid participantId, [FromBody] ParticipantTaskRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(RegistrationsController.ParticipantTaskResponse), StatusCodes.Status201Created)]
+    public async Task<ActionResult<RegistrationsController.ParticipantTaskResponse>> CreateAsync(Guid participantId, [FromBody] ParticipantTaskRequest request, CancellationToken cancellationToken)
     {
         try
         {
             var created = await _taskService.CreateAsync(participantId, request.ToInput(), cancellationToken);
-            return CreatedAtAction(nameof(ListAsync), new { participantId }, ParticipantTaskResponse.FromDomain(created));
+            return CreatedAtAction(nameof(ListAsync), new { participantId }, RegistrationsController.ParticipantTaskResponse.FromDomain(created));
         }
         catch (InvalidOperationException ex)
         {
@@ -57,9 +57,9 @@ public class ParticipantTasksController : ControllerBase
 
     [HttpPut("{taskId:guid}")]
     [SwaggerOperation(Summary = "ویرایش تسک", Description = "عنوان، توضیح، تاریخ سررسید یا مسئول تسک را ویرایش می‌کند.")]
-    [ProducesResponseType(typeof(ParticipantTaskResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(RegistrationsController.ParticipantTaskResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ParticipantTaskResponse>> UpdateAsync(Guid participantId, Guid taskId, [FromBody] ParticipantTaskRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<RegistrationsController.ParticipantTaskResponse>> UpdateAsync(Guid participantId, Guid taskId, [FromBody] ParticipantTaskRequest request, CancellationToken cancellationToken)
     {
         try
         {
@@ -69,7 +69,7 @@ public class ParticipantTasksController : ControllerBase
                 return NotFound();
             }
 
-            return Ok(ParticipantTaskResponse.FromDomain(updated));
+            return Ok(RegistrationsController.ParticipantTaskResponse.FromDomain(updated));
         }
         catch (InvalidOperationException ex)
         {
@@ -79,9 +79,9 @@ public class ParticipantTasksController : ControllerBase
 
     [HttpPatch("{taskId:guid}/status")]
     [SwaggerOperation(Summary = "تغییر وضعیت تسک", Description = "وضعیت تسک را به حالت جدید (در حال انجام، تکمیل‌شده و ... ) تغییر می‌دهد.")]
-    [ProducesResponseType(typeof(ParticipantTaskResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(RegistrationsController.ParticipantTaskResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ParticipantTaskResponse>> UpdateStatusAsync(Guid participantId, Guid taskId, [FromBody] ParticipantTaskStatusRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<RegistrationsController.ParticipantTaskResponse>> UpdateStatusAsync(Guid participantId, Guid taskId, [FromBody] ParticipantTaskStatusRequest request, CancellationToken cancellationToken)
     {
         try
         {
@@ -91,7 +91,7 @@ public class ParticipantTasksController : ControllerBase
                 return NotFound();
             }
 
-            return Ok(ParticipantTaskResponse.FromDomain(updated));
+            return Ok(RegistrationsController.ParticipantTaskResponse.FromDomain(updated));
         }
         catch (InvalidOperationException ex)
         {

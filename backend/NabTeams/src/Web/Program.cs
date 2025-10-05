@@ -11,10 +11,11 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
-using OpenTelemetry.Exporter.Prometheus.AspNetCore;
+using OpenTelemetry.Exporter.Prometheus;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using Polly;
@@ -37,6 +38,8 @@ using NabTeams.Web.Configuration;
 using NabTeams.Web.Hubs;
 using NabTeams.Web.Middleware;
 using Swashbuckle.AspNetCore.Annotations;
+using NotificationOptions = NabTeams.Infrastructure.Services.NotificationOptions;
+using PaymentGatewayOptions = NabTeams.Infrastructure.Services.PaymentGatewayOptions;
 
 var builder = WebApplication.CreateBuilder(args);
 

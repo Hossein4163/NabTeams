@@ -1,0 +1,164 @@
+{
+    "checksum": "217646a3899d1b27ec94278e81f20770a05d1b6d6409c7580dd2a8dc204b99b0",
+    "data": {
+    "id": "37703a8c-abf9-47cc-b198-847b5904f3ca",
+    "createdAt": 1759682473693,
+    "updatedAt": 1759682478743,
+    "title": "Swagger Configuration in ASP.NET Core",
+    "messages": [
+        {
+            "id": "852c5db5-cd26-428a-b132-0e4a6f8d60a0",
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Explain this:"
+                },
+                {
+                    "type": "codeSnippet",
+                    "text": "{\n    app.UseSwagger();\n    app.UseSwaggerUI();\n}",
+                    "language": "c#"
+                },
+                {
+                    "type": "text",
+                    "text": "Cannot resolve symbol 'UseSwaggerUI'"
+                }
+            ],
+            "context": {
+                "currentFile": {
+                    "path": "/Users/shinra/Desktop/GitHub/NabTeams/backend/NabTeams/src/Web/Program.cs",
+                    "fsPath": "/Users/shinra/Desktop/GitHub/NabTeams/backend/NabTeams/src/Web/Program.cs",
+                    "content": "using System.IO;\nusing System.IO.Compression;\nusing System.Net;\nusing System.Security.Claims;\nusing System.Text.Json;\nusing Microsoft.AspNetCore.Authentication.JwtBearer;\nusing Microsoft.AspNetCore.Diagnostics.HealthChecks;\nusing Microsoft.AspNetCore.Http;\nusing Microsoft.AspNetCore.HttpLogging;\nusing Microsoft.AspNetCore.HttpOverrides;\nusing Microsoft.AspNetCore.ResponseCompression;\nusing Microsoft.AspNetCore.StaticFiles;\nusing Microsoft.EntityFrameworkCore;\nusing Microsoft.Extensions.FileProviders;\nusing Microsoft.IdentityModel.Tokens;\nusing Microsoft.Extensions.Options;\nusing Microsoft.OpenApi.Models;\nusing OpenTelemetry.Exporter.Prometheus;\nusing OpenTelemetry.Metrics;\nusing OpenTelemetry.Resources;\nusing Polly;\nusing Polly.Extensions.Http;\nusing NabTeams.Application.Abstractions;\nusing NabTeams.Application.Auditing;\nusing NabTeams.Application.Common;\nusing NabTeams.Application.Events;\nusing NabTeams.Application.Integrations;\nusing NabTeams.Application.Operations;\nusing NabTeams.Application.Registrations;\nusing NabTeams.Application.Tasks;\nusing NabTeams.Infrastructure.HealthChecks;\nusing NabTeams.Infrastructure.Monitoring;\nusing NabTeams.Infrastructure.Persistence;\nusing NabTeams.Infrastructure.Queues;\nusing NabTeams.Infrastructure.Services;\nusing NabTeams.Web.Background;\nusing NabTeams.Web.Configuration;\nusing NabTeams.Web.Hubs;\nusing NabTeams.Web.Middleware;\nusing Swashbuckle.AspNetCore.Annotations;\n\nvar builder = WebApplication.CreateBuilder(args);\n\nbuilder.Services.AddControllers();\nbuilder.Services.AddEndpointsApiExplorer();\nbuilder.Services.AddSwaggerGen(options =>\n{\n    options.SwaggerDoc(\"v1\", new OpenApiInfo\n    {\n        Title = \"NabTeams API\",\n        Version = \"v1\",\n        Description = \"پوشش‌دهندهٔ سرویس‌های چت، پشتیبانی و ثبت‌نام شرکت‌کنندگان، داوران و سرمایه‌گذاران.\"\n    });\n    options.EnableAnnotations();\n});\nbuilder.Services.AddSignalR();\nbuilder.Services.AddResponseCompression(options =>\n{\n    options.EnableForHttps = true;\n    options.Providers.Add<BrotliCompressionProvider>();\n    options.Providers.Add<GzipCompressionProvider>();\n});\n\nbuilder.Services.Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);\nbuilder.Services.Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);\n\nbuilder.Services.Configure<ForwardedHeadersOptions>(options =>\n{\n    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;\n    options.KnownNetworks.Clear();\n    options.KnownProxies.Clear();\n});\n\nbuilder.Services.AddHttpLogging(logging =>\n{\n    logging.LoggingFields = HttpLoggingFields.RequestPath | HttpLoggingFields.RequestMethod | HttpLoggingFields.ResponseStatusCode;\n    logging.RequestBodyLogLimit = 0;\n    logging.ResponseBodyLogLimit = 0;\n});\n\nbuilder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection(\"Gemini\"));\nbuilder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSection(\"Authentication\"));\nbuilder.Services.Configure<PaymentGatewayOptions>(builder.Configuration.GetSection(\"Payments\"));\nbuilder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection(\"Notification\"));\nvar authenticationSettings = builder.Configuration.GetSection(\"Authentication\").Get<AuthenticationSettings>() ?? new AuthenticationSettings { Disabled = true };\n\nbuilder.Services.AddHttpClient<GeminiBusinessPlanAnalyzer>((sp, client) =>\n    {\n        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;\n        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)\n            ? \"https://generativelanguage.googleapis.com\"\n            : options.BaseUrl.TrimEnd('/');\n        client.BaseAddress = new Uri(baseUrl + \"/\");\n        client.DefaultRequestHeaders.Accept.ParseAdd(\"application/json\");\n        client.Timeout = TimeSpan.FromSeconds(20);\n    })\n    .SetHandlerLifetime(TimeSpan.FromMinutes(5))\n    .AddPolicyHandler(GetRetryPolicy())\n    .AddPolicyHandler(GetCircuitBreakerPolicy());\n\nbuilder.Services.AddHttpClient<GeminiTaskAdvisor>((sp, client) =>\n    {\n        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;\n        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)\n            ? \"https://generativelanguage.googleapis.com\"\n            : options.BaseUrl.TrimEnd('/');\n        client.BaseAddress = new Uri(baseUrl + \"/\");\n        client.DefaultRequestHeaders.Accept.ParseAdd(\"application/json\");\n        client.Timeout = TimeSpan.FromSeconds(20);\n    })\n    .SetHandlerLifetime(TimeSpan.FromMinutes(5))\n    .AddPolicyHandler(GetRetryPolicy())\n    .AddPolicyHandler(GetCircuitBreakerPolicy());\n\nbuilder.Services.AddHttpClient<IdPayPaymentGateway>((sp, client) =>\n    {\n        var options = sp.GetRequiredService<IOptions<PaymentGatewayOptions>>().Value;\n        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)\n            ? \"https://api.idpay.ir\"\n            : options.BaseUrl.TrimEnd('/');\n        client.BaseAddress = new Uri(baseUrl + \"/\");\n        client.DefaultRequestHeaders.Accept.ParseAdd(\"application/json\");\n        client.Timeout = TimeSpan.FromSeconds(20);\n    })\n    .SetHandlerLifetime(TimeSpan.FromMinutes(5))\n    .AddPolicyHandler(GetRetryPolicy())\n    .AddPolicyHandler(GetCircuitBreakerPolicy());\n\nbuilder.Services.AddHttpClient(\"notifications.sms\", (sp, client) =>\n    {\n        var options = sp.GetRequiredService<IOptions<NotificationOptions>>().Value;\n        if (!string.IsNullOrWhiteSpace(options.Sms.BaseUrl))\n        {\n            client.BaseAddress = new Uri(options.Sms.BaseUrl.TrimEnd('/') + \"/\");\n        }\n        client.Timeout = TimeSpan.FromSeconds(10);\n    })\n    .SetHandlerLifetime(TimeSpan.FromMinutes(5))\n    .AddPolicyHandler(GetRetryPolicy())\n    .AddPolicyHandler(GetCircuitBreakerPolicy());\n\nbuilder.Services.AddHttpClient(\"gemini\", (sp, client) =>\n    {\n        var options = sp.GetRequiredService<IOptions<GeminiOptions>>().Value;\n        var endpoint = string.IsNullOrWhiteSpace(options.Endpoint)\n            ? \"https://generativelanguage.googleapis.com/v1beta\"\n            : options.Endpoint.TrimEnd('/');\n        client.BaseAddress = new Uri(endpoint + \"/\");\n        client.DefaultRequestHeaders.Accept.ParseAdd(\"application/json\");\n        client.Timeout = TimeSpan.FromSeconds(15);\n    })\n    .SetHandlerLifetime(TimeSpan.FromMinutes(5))\n    .AddPolicyHandler(GetRetryPolicy())\n    .AddPolicyHandler(GetCircuitBreakerPolicy());\n\nif (!authenticationSettings.Disabled)\n{\n    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)\n        .AddJwtBearer(options =>\n        {\n            options.Authority = authenticationSettings.Authority;\n            options.Audience = string.IsNullOrWhiteSpace(authenticationSettings.Audience) ? null : authenticationSettings.Audience;\n            options.RequireHttpsMetadata = authenticationSettings.RequireHttpsMetadata;\n            options.TokenValidationParameters = new TokenValidationParameters\n            {\n                NameClaimType = authenticationSettings.NameClaimType ?? ClaimTypes.NameIdentifier,\n                RoleClaimType = authenticationSettings.RoleClaimType ?? ClaimTypes.Role,\n                ValidateAudience = !string.IsNullOrWhiteSpace(authenticationSettings.Audience)\n            };\n        });\n\n    builder.Services.AddAuthorization(options =>\n    {\n        options.AddPolicy(AuthorizationPolicies.Admin, policy => policy.RequireRole(authenticationSettings.AdminRole));\n    });\n}\nelse\n{\n    builder.Services.AddAuthorization(options =>\n    {\n        options.AddPolicy(AuthorizationPolicies.Admin, policy => policy.RequireAssertion(_ => true));\n    });\n}\n\nvar connectionString = builder.Configuration.GetConnectionString(\"DefaultConnection\")\n    ?? \"Host=localhost;Port=5432;Database=nabteams;Username=nabteams;Password=nabteams\";\n\nbuilder.Services.AddDbContext<ApplicationDbContext>(options =>\n    options.UseNpgsql(connectionString));\nbuilder.Services.AddDbContextFactory<ApplicationDbContext>(options =>\n    options.UseNpgsql(connectionString));\n\nbuilder.Services.AddScoped<IChatRepository, EfChatRepository>();\nbuilder.Services.AddScoped<IModerationLogStore, EfModerationLogStore>();\nbuilder.Services.AddScoped<IUserDisciplineStore, EfUserDisciplineStore>();\nbuilder.Services.AddScoped<IAppealStore, EfAppealStore>();\nbuilder.Services.AddSingleton<IRateLimiter, SlidingWindowRateLimiter>();\nbuilder.Services.AddSingleton<IModerationService, GeminiModerationService>();\nbuilder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();\nbuilder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();\nbuilder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();\nbuilder.Services.AddScoped<IAuditLogService, AuditLogService>();\nbuilder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();\nbuilder.Services.AddScoped<IEventRepository, EventRepository>();\nbuilder.Services.AddScoped<IEventService, EventService>();\nbuilder.Services.AddScoped<IOperationsChecklistRepository, EfOperationsChecklistRepository>();\nbuilder.Services.AddScoped<IIntegrationSettingsRepository, EfIntegrationSettingsRepository>();\nbuilder.Services.AddScoped<IIntegrationSettingsService, IntegrationSettingsService>();\nbuilder.Services.AddScoped<IParticipantTaskRepository, ParticipantTaskRepository>();\nbuilder.Services.AddScoped<IParticipantTaskService, ParticipantTaskService>();\nbuilder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();\nbuilder.Services.AddSingleton<IOperationsArtifactStorage, LocalOperationsArtifactStorage>();\nbuilder.Services.AddSingleton<IRegistrationSummaryBuilder, RegistrationSummaryBuilder>();\nbuilder.Services.AddScoped<INotificationService, ExternalNotificationService>();\nbuilder.Services.AddScoped<IPaymentGateway>(sp => sp.GetRequiredService<IdPayPaymentGateway>());\nbuilder.Services.AddScoped<IBusinessPlanAnalyzer>(sp => sp.GetRequiredService<GeminiBusinessPlanAnalyzer>());\nbuilder.Services.AddScoped<IAiTaskAdvisor>(sp => sp.GetRequiredService<GeminiTaskAdvisor>());\nbuilder.Services.AddScoped<IRegistrationWorkflowService, RegistrationWorkflowService>();\nbuilder.Services.AddScoped<IOperationsChecklistService, OperationsChecklistService>();\nbuilder.Services.AddScoped<ISupportResponder, SupportResponder>();\nbuilder.Services.AddHostedService<ChatModerationWorker>();\nbuilder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();\nbuilder.Services.Configure<FileStorageOptions>(builder.Configuration.GetSection(\"FileStorage\"));\nbuilder.Services.AddSingleton<IFileStorageService, LocalFileStorageService>();\n\nbuilder.Services.AddHealthChecks()\n    .AddCheck<DatabaseHealthCheck>(\"database\")\n    .AddCheck<GeminiHealthCheck>(\"gemini\");\n\nbuilder.Services.AddCors(options =>\n{\n    options.AddPolicy(\"frontend\", policy =>\n        policy.WithOrigins(\"http://localhost:3000\")\n              .AllowAnyHeader()\n              .AllowAnyMethod()\n              .AllowCredentials());\n});\n\nbuilder.Services.AddOpenTelemetry()\n    .ConfigureResource(resource => resource.AddService(\"NabTeams.Api\"))\n    .WithMetrics(metrics =>\n    {\n        metrics.AddAspNetCoreInstrumentation();\n        metrics.AddHttpClientInstrumentation();\n        metrics.AddMeter(MetricsRecorder.MeterName);\n        metrics.AddPrometheusExporter();\n    });\n\nvar app = builder.Build();\n\nvar fileStorageOptions = app.Services.GetRequiredService<IOptions<FileStorageOptions>>().Value;\nvar uploadsRoot = ResolveStorageRoot(app.Environment.ContentRootPath, fileStorageOptions.RootPath);\nDirectory.CreateDirectory(uploadsRoot);\nvar requestPath = ResolveRequestPath(fileStorageOptions.PublicBaseUrl);\nvar contentTypeProvider = new FileExtensionContentTypeProvider();\nvar registrationDocumentStaticFiles = new StaticFileOptions\n{\n    FileProvider = new PhysicalFileProvider(uploadsRoot),\n    RequestPath = requestPath,\n    ContentTypeProvider = contentTypeProvider\n};\n\nawait DatabaseInitializer.InitializeAsync(app.Services);\n\nif (app.Environment.IsDevelopment())\n{\n    app.UseSwagger();\n    app.UseSwaggerUI();\n}\n\napp.UseForwardedHeaders();\napp.UseHttpLogging();\n\nif (!app.Environment.IsDevelopment())\n{\n    app.UseHttpsRedirection();\n}\n\napp.UseResponseCompression();\napp.UseSecurityHeaders();\napp.UseStaticFiles(registrationDocumentStaticFiles);\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseStaticFiles();\n\napp.UseRouting();\napp.UseCors(\"frontend\");\n\nif (!authenticationSettings.Disabled)\n{\n    app.UseAuthentication();\n}\nelse\n{\n    app.Use(async (context, next) =>\n    {\n        if (context.User?.Identity?.IsAuthenticated != true)\n        {\n            var debugUser = context.Request.Headers[\"X-Debug-User\"].FirstOrDefault()\n                ?? context.Request.Query[\"debug_user\"].FirstOrDefault();\n            if (!string.IsNullOrWhiteSpace(debugUser))\n            {\n                var identity = new ClaimsIdentity(\"Debug\");\n                identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, debugUser));\n                identity.AddClaim(new Claim(\"sub\", debugUser));\n                identity.AddClaim(new Claim(ClaimTypes.Name, debugUser));\n\n                var debugEmail = context.Request.Headers[\"X-Debug-Email\"].FirstOrDefault()\n                    ?? context.Request.Query[\"debug_email\"].FirstOrDefault();\n                if (!string.IsNullOrWhiteSpace(debugEmail))\n                {\n                    identity.AddClaim(new Claim(ClaimTypes.Email, debugEmail));\n                }\n\n                var rolesHeader = context.Request.Headers[\"X-Debug-Roles\"].FirstOrDefault()\n                    ?? context.Request.Query[\"debug_roles\"].FirstOrDefault();\n                if (!string.IsNullOrWhiteSpace(rolesHeader))\n                {\n                    var roles = rolesHeader.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);\n                    foreach (var role in roles)\n                    {\n                        identity.AddClaim(new Claim(ClaimTypes.Role, role));\n                        identity.AddClaim(new Claim(\"role\", role));\n                        identity.AddClaim(new Claim(\"roles\", role));\n                    }\n                }\n\n                context.User = new ClaimsPrincipal(identity);\n            }\n        }\n\n        await next();\n    });\n}\n\napp.UseAuthorization();\napp.MapControllers();\napp.MapHub<ChatHub>(\"/hubs/chat\");\napp.MapPrometheusScrapingEndpoint();\n\napp.MapHealthChecks(\"/health/live\", new HealthCheckOptions\n{\n    Predicate = _ => false\n});\n\napp.MapHealthChecks(\"/health/ready\", new HealthCheckOptions\n{\n    ResponseWriter = async (context, report) =>\n    {\n        context.Response.ContentType = \"application/json\";\n        var payload = new\n        {\n            status = report.Status.ToString(),\n            results = report.Entries.Select(entry => new\n            {\n                name = entry.Key,\n                status = entry.Value.Status.ToString(),\n                description = entry.Value.Description,\n                error = entry.Value.Exception?.Message\n            })\n        };\n\n        await context.Response.WriteAsync(JsonSerializer.Serialize(payload));\n    }\n});\n\napp.Run();\n\nstatic string ResolveStorageRoot(string contentRoot, string? configuredRoot)\n{\n    if (string.IsNullOrWhiteSpace(configuredRoot))\n    {\n        return Path.Combine(contentRoot, \"storage\", \"uploads\");\n    }\n\n    var path = configuredRoot;\n    if (!Path.IsPathRooted(path))\n    {\n        path = Path.Combine(contentRoot, path);\n    }\n\n    return Path.GetFullPath(path);\n}\n\nstatic PathString ResolveRequestPath(string? publicBaseUrl)\n{\n    if (string.IsNullOrWhiteSpace(publicBaseUrl))\n    {\n        return new PathString(\"/uploads\");\n    }\n\n    if (Uri.TryCreate(publicBaseUrl, UriKind.Absolute, out var absolute))\n    {\n        return new PathString(absolute.AbsolutePath);\n    }\n\n    return new PathString(publicBaseUrl.StartsWith('/') ? publicBaseUrl : $\"/{publicBaseUrl}\");\n}\n\nstatic IAsyncPolicy<HttpResponseMessage> GetRetryPolicy() =>\n    HttpPolicyExtensions\n        .HandleTransientHttpError()\n        .OrResult(response => response.StatusCode == HttpStatusCode.TooManyRequests)\n        .WaitAndRetryAsync(3, attempt => TimeSpan.FromMilliseconds(200 * attempt));\n\nstatic IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy() =>\n    HttpPolicyExtensions\n        .HandleTransientHttpError()\n        .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));\n",
+                    "language": "c#"
+                },
+                "codebaseEnabled": true
+            },
+            "createdAt": 1759682473707,
+            "isInternal": false,
+            "rawContent": {
+                "type": "doc",
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Explain this:"
+                            },
+                            {
+                                "type": "codeBlock",
+                                "attrs": {
+                                    "language": "c#"
+                                },
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": "{\n    app.UseSwagger();\n    app.UseSwaggerUI();\n}"
+                                    }
+                                ]
+                            },
+                            {
+                                "type": "text",
+                                "text": "Cannot resolve symbol 'UseSwaggerUI'"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "autoAppliedRules": []
+        },
+        {
+            "id": "d66b8c10-b131-4056-8805-24090ea96cc8",
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "I'll explain the code snippet you're asking about and help you understand why you're seeing the \"Cannot resolve symbol 'UseSwaggerUI'\" error.\n\nThe code snippet you provided is related to Swagger configuration in an ASP.NET Core application:\n\n```c#\n{\n    app.UseSwagger();\n    app.UseSwaggerUI();\n}\n```\n\nLet me analyze what's happening:"
+                },
+                {
+                    "type": "toolCall",
+                    "toolCallId": "toolu_01TQopW1hxfbqaKZMoQ9sgtA",
+                    "title": "Fulltext search",
+                    "statusText": "Done",
+                    "status": "SUCCESS",
+                    "isHidden": false
+                },
+                {
+                    "type": "text",
+                    "text": "Let me check the Program.cs file to see the full context:"
+                },
+                {
+                    "type": "toolCall",
+                    "toolCallId": "toolu_01P8nCLZCoAb3i3H8RbQDM95",
+                    "statusText": "Viewed file (lines 250:289)",
+                    "status": "SUCCESS",
+                    "context": {
+                        "files": [
+                            {
+                                "path": "src/Web/Program.cs",
+                                "fsPath": "/Users/shinra/Desktop/GitHub/NabTeams/backend/NabTeams/src/Web/Program.cs"
+                            }
+                        ]
+                    },
+                    "isHidden": false
+                },
+                {
+                    "type": "text",
+                    "text": "Now let me check what Swagger packages are referenced in the project:"
+                },
+                {
+                    "type": "toolCall",
+                    "toolCallId": "toolu_01JyXbhZ9rUY3MhtPgkdekS9",
+                    "title": "File search",
+                    "statusText": "Done",
+                    "status": "SUCCESS",
+                    "isHidden": false
+                },
+                {
+                    "type": "text",
+                    "text": "Let me check the Web project's csproj file to see if Swagger packages are properly referenced:"
+                },
+                {
+                    "type": "toolCall",
+                    "toolCallId": "toolu_01ApJPL6DjvFvG6xw3TWEPJf",
+                    "statusText": "Viewed file (lines 1:21)",
+                    "status": "SUCCESS",
+                    "context": {
+                        "files": [
+                            {
+                                "path": "src/Web/NabTeams.Web.csproj",
+                                "fsPath": "/Users/shinra/Desktop/GitHub/NabTeams/backend/NabTeams/src/Web/NabTeams.Web.csproj"
+                            }
+                        ]
+                    },
+                    "isHidden": false
+                },
+                {
+                    "type": "text",
+                    "text": "Based on my analysis, here's what's happening:\n\n## Explanation of the Error\n\nThe error \"Cannot resolve symbol 'UseSwaggerUI'\" occurs because you're missing the main Swagger package in your project. Your code is trying to use Swagger UI middleware, but you only have the `Swashbuckle.AspNetCore.Annotations` package installed, which provides annotation support for Swagger but doesn't include the core Swagger UI functionality.\n\n## What the Code Does\n\nThe code snippet you shared is configuring Swagger in your ASP.NET Core application:\n\n1. `app.UseSwagger()` - Enables the Swagger middleware that generates the Swagger JSON document\n2. `app.UseSwaggerUI()` - Enables the Swagger UI middleware that provides a web-based UI to interact with your API documentation\n\n## How to Fix the Error\n\nYou need to add the main Swagger package to your project. In your NabTeams.Web.csproj file, you should add:\n\n```xml\n<PackageReference Include=\"Swashbuckle.AspNetCore\" Version=\"6.5.0\" />\n```\n\nCurrently, you only have:\n```xml\n<PackageReference Include=\"Swashbuckle.AspNetCore.Annotations\" Version=\"6.5.0\" />\n```\n\nThe `Swashbuckle.AspNetCore` package includes:\n- Swashbuckle.AspNetCore.Swagger\n- Swashbuckle.AspNetCore.SwaggerGen\n- Swashbuckle.AspNetCore.SwaggerUI\n\nAfter adding this package and restoring NuGet packages, the error should be resolved, and you'll be able to use both `UseSwagger()` and `UseSwaggerUI()` methods."
+                }
+            ],
+            "context": {
+                "author": "Ask agent",
+                "operationId": "30ed28a0-3fe4-4dc2-8c58-4b4872e69cdd",
+                "usageStatistics": {
+                    "llmCallsUsedForAnswer": 5.0,
+                    "llmCallsUsedTotal": 21.0,
+                    "llmCallsLimit": 25.0,
+                    "limitRenewalMillisecondTimestamp": 1759688402012
+                }
+            },
+            "createdAt": 1759682478743,
+            "isInternal": false
+        }
+    ],
+    "isAgent": false,
+    "isNameGenerated": true,
+    "isCustomAgent": false,
+    "isUnitTestsAgent": false,
+    "isE2EAgent": false,
+    "isWebDevAgent": false,
+    "isQnaAgent": true,
+    "isRepoInfoAgent": false
+}
+}

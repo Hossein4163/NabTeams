@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities;
 using Moq;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Common;
@@ -10,6 +11,7 @@ using NabTeams.Domain.Enums;
 using NabTeams.Web.Configuration;
 using NabTeams.Web.Controllers;
 using Xunit;
+using Message = NabTeams.Domain.Entities.Message;
 
 namespace NabTeams.Api.Tests;
 
