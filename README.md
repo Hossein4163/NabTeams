@@ -26,6 +26,7 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 | `Authentication__Audience`                                      | بک‌اند      | Audience توکن JWT.                                                                                                |
 | `Authentication__AdminRole`                                     | بک‌اند      | نام نقش ادمین (پیش‌فرض `admin`).                                                                                  |
 | `Authentication__Disabled`                                      | بک‌اند      | اگر `true` باشد، احراز هویت غیرفعال می‌شود (برای توسعه محلی).                                                     |
+| `Payments__BaseUrl`                                             | بک‌اند      | آدرس پایه برای تولید لینک‌های پرداخت (پیش‌فرض `https://payments.example.com/session`).                           |
 | `NEXTAUTH_URL`                                                  | فرانت‌اند   | آدرس پابلیک اپ Next.js (مثلاً `http://localhost:3000`).                                                           |
 | `NEXTAUTH_SECRET`                                               | فرانت‌اند   | کلید رمزنگاری سشن NextAuth.                                                                                       |
 | `SSO_ISSUER`, `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`, `SSO_SCOPE` | فرانت‌اند   | تنظیمات ارائه‌دهنده OIDC برای NextAuth. اگر مقداردهی نشود و `AUTH_ALLOW_DEV=true` باشد، ورود آزمایشی فعال می‌شود. |
@@ -39,13 +40,17 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
    ```bash
    docker run --name nabteams-postgres -e POSTGRES_PASSWORD=nabteams -e POSTGRES_USER=nabteams -e POSTGRES_DB=nabteams -p 5432:5432 -d postgres:15
    ```
-3. اجرای سرویس:
+3. اعمال مایگریشن‌های EF Core (یک بار برای هر محیط):
    ```bash
-   cd backend/src/Web
+   cd backend/NabTeams/src/Web
+   dotnet ef database update
+   ```
+4. اجرای سرویس:
+   ```bash
    dotnet restore
    dotnet run --urls http://localhost:5000
    ```
-4. اولین اجرا مهاجرت EF Core را اعمال و منابع اولیهٔ دانش را Seed می‌کند. مستندات Swagger در `http://localhost:5000/swagger` در دسترس است.
+5. اولین اجرا مهاجرت EF Core را اعمال و منابع اولیهٔ دانش و ثبت‌نام را Seed می‌کند. مستندات Swagger در `http://localhost:5000/swagger` در دسترس است.
 
 ### مهم‌ترین APIها
 
@@ -55,6 +60,9 @@ implementation_plan.md   # سند تحلیل و طراحی اولیه
 - `POST /api/appeals` — ثبت اعتراض نسبت به پیام مسدود شده.
 - `GET /api/appeals` — فهرست اعتراض‌های کاربر.
 - `GET /api/appeals/admin` و `POST /api/appeals/{id}/decision` — بررسی و تصمیم‌گیری توسط ادمین.
+- `POST /api/registrations/participants/{id}/finalize` — تأیید نهایی ثبت‌نام توسط تیم.
+- `POST /api/registrations/participants/{id}/approve` — تایید ادمین، ایجاد لینک پرداخت و ارسال اعلان.
+- `POST /api/registrations/participants/{id}/payments/complete` — ثبت موفقیت پرداخت و ارسال اعلان تایید.
 - `POST /api/support/query` — پاسخ دانشی (RAG) با Gemini.
 - `GET/POST/DELETE /api/knowledge-base` — مدیریت منابع دانش توسط ادمین.
 - `GET /api/moderation/{role}/logs` — مشاهده لاگ‌های پایش (ادمین).

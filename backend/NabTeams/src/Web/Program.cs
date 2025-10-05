@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using OpenTelemetry.Exporter.Prometheus.AspNetCore;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -16,6 +17,7 @@ using Polly;
 using Polly.Extensions.Http;
 using NabTeams.Application.Abstractions;
 using NabTeams.Application.Common;
+using NabTeams.Application.Registrations;
 using NabTeams.Infrastructure.HealthChecks;
 using NabTeams.Infrastructure.Monitoring;
 using NabTeams.Infrastructure.Persistence;
@@ -25,12 +27,22 @@ using NabTeams.Web.Background;
 using NabTeams.Web.Configuration;
 using NabTeams.Web.Hubs;
 using NabTeams.Web.Middleware;
+using Swashbuckle.AspNetCore.Annotations;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "NabTeams API",
+        Version = "v1",
+        Description = "پوشش‌دهندهٔ سرویس‌های چت، پشتیبانی و ثبت‌نام شرکت‌کنندگان، داوران و سرمایه‌گذاران."
+    });
+    options.EnableAnnotations();
+});
 builder.Services.AddSignalR();
 builder.Services.AddResponseCompression(options =>
 {
@@ -58,6 +70,7 @@ builder.Services.AddHttpLogging(logging =>
 
 builder.Services.Configure<GeminiOptions>(builder.Configuration.GetSection("Gemini"));
 builder.Services.Configure<AuthenticationSettings>(builder.Configuration.GetSection("Authentication"));
+builder.Services.Configure<PaymentGatewayOptions>(builder.Configuration.GetSection("Payments"));
 var authenticationSettings = builder.Configuration.GetSection("Authentication").Get<AuthenticationSettings>() ?? new AuthenticationSettings { Disabled = true };
 
 builder.Services.AddHttpClient("gemini", client =>
@@ -116,6 +129,11 @@ builder.Services.AddSingleton<IRateLimiter, SlidingWindowRateLimiter>();
 builder.Services.AddSingleton<IModerationService, GeminiModerationService>();
 builder.Services.AddSingleton<IChatModerationQueue, ChatModerationQueue>();
 builder.Services.AddScoped<ISupportKnowledgeBase, EfSupportKnowledgeBase>();
+builder.Services.AddScoped<IRegistrationRepository, EfRegistrationRepository>();
+builder.Services.AddSingleton<IRegistrationDocumentStorage, LocalRegistrationDocumentStorage>();
+builder.Services.AddSingleton<INotificationService, FakeNotificationService>();
+builder.Services.AddSingleton<IPaymentGateway, FakePaymentGateway>();
+builder.Services.AddScoped<IRegistrationWorkflowService, RegistrationWorkflowService>();
 builder.Services.AddScoped<ISupportResponder, SupportResponder>();
 builder.Services.AddHostedService<ChatModerationWorker>();
 builder.Services.AddSingleton<IMetricsRecorder, MetricsRecorder>();
@@ -163,6 +181,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseResponseCompression();
 app.UseSecurityHeaders();
+
+app.UseStaticFiles();
 
 app.UseRouting();
 app.UseCors("frontend");
