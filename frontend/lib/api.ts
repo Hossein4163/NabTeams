@@ -262,16 +262,38 @@ export interface ParticipantRegistrationPayload {
   links: ParticipantLinkInput[];
 }
 
+export interface ParticipantRegistrationMemberResponse extends ParticipantTeamMemberInput {
+  id: string;
+}
+
+export interface ParticipantRegistrationDocumentResponse extends ParticipantDocumentInput {
+  id: string;
+}
+
+export interface ParticipantRegistrationLinkResponse extends ParticipantLinkInput {
+  id: string;
+  label?: string | null;
+}
+
 export interface ParticipantRegistrationResponse {
   id: string;
   headFirstName: string;
   headLastName: string;
+  nationalId: string;
+  phoneNumber: string;
+  email?: string | null;
+  birthDate?: string | null;
+  educationDegree: string;
+  fieldOfStudy: string;
   teamName: string;
-  submittedAt: string;
+  hasTeam: boolean;
   teamCompleted: boolean;
-  members: Array<ParticipantTeamMemberInput & { id: string }>;
-  documents: Array<ParticipantDocumentInput & { id: string }>;
-  links: Array<ParticipantLinkInput & { id: string; label: string }>;
+  additionalNotes?: string | null;
+  submittedAt: string;
+  finalizedAt?: string | null;
+  members: ParticipantRegistrationMemberResponse[];
+  documents: ParticipantRegistrationDocumentResponse[];
+  links: ParticipantRegistrationLinkResponse[];
 }
 
 export async function submitParticipantRegistration(
